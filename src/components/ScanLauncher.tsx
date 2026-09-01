@@ -1,11 +1,18 @@
 "use client";
 
-import React, { useState } from "react";
-import { Search, Loader2, Sparkles, MapPin, Sliders, Globe, Radio, Flame, ShieldAlert, Cpu, ArrowRight } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Search, Loader2, Sparkles, MapPin, Sliders, Globe, Radio, Flame, ShieldAlert, Cpu, ArrowRight, Check } from "lucide-react";
 
 interface ScanLauncherProps {
   onScanLaunched: (scanId: string) => void;
   isLoading: boolean;
+}
+
+interface PlacePrediction {
+  description: string;
+  place_id: string;
+  main_text?: string;
+  secondary_text?: string;
 }
 
 const PRESETS = [
@@ -24,9 +31,61 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
     "google_places" | "live_google_maps" | "serpapi" | "mock" | "apify" | "outscraper"
   >("google_places");
 
+  // Autocomplete state
+  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
+  const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Debounced Place Autocomplete Query
+  useEffect(() => {
+    if (!location.trim() || location.length < 2) {
+      setPredictions([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingPlaces(true);
+      try {
+        const res = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(location.trim())}`);
+        if (res.ok) {
+          const data = await res.json();
+          setPredictions(data.predictions || []);
+          if (data.predictions?.length > 0) {
+            setShowDropdown(true);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch autocomplete predictions:", err);
+      } finally {
+        setIsSearchingPlaces(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [location]);
+
+  // Handle click outside to close dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelectPrediction = (prediction: PlacePrediction) => {
+    setLocation(prediction.description);
+    setShowDropdown(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!niche.trim() || !location.trim()) return;
+    setShowDropdown(false);
 
     try {
       const res = await fetch("/api/scans", {
@@ -56,10 +115,11 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
     setNiche(p.niche);
     setLocation(p.location);
     setRadiusKm(p.radius);
+    setShowDropdown(false);
   };
 
   return (
-    <div className="double-bezel-outer relative overflow-hidden group">
+    <div className="double-bezel-outer relative overflow-visible group">
       {/* Dynamic Ambient Radial Mesh (10% Accent Layer) */}
       <div className="absolute -top-12 right-1/4 w-96 h-48 bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-transparent rounded-full blur-3xl pointer-events-none transition-all duration-700 group-hover:scale-110" />
 
@@ -73,7 +133,7 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
               </h2>
             </div>
             <p className="text-xs text-slate-400 mt-1">
-              Discovers high-reputation operating businesses, validates rating &ge; 4.0★ &amp; reviews &ge; 50, and runs headless Chromium DOM audits.
+              Search any city worldwide. Ingests verified businesses, validates rating &ge; 4.0★ &amp; reviews &ge; 50, and performs headless DOM audits.
             </p>
           </div>
 
@@ -93,7 +153,7 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-3.5">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-3.5 relative">
           {/* Niche Input */}
           <div className="md:col-span-4">
             <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold mb-1.5">
@@ -111,22 +171,62 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
             </div>
           </div>
 
-          {/* Location Input */}
-          <div className="md:col-span-3">
-            <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold mb-1.5">
-              Target City / Search Radius
+          {/* Target City with Real-Time Google Places Autocomplete */}
+          <div className="md:col-span-3 relative" ref={dropdownRef}>
+            <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold mb-1.5 flex justify-between">
+              <span>Target City (Search Worldwide)</span>
+              {isSearchingPlaces && <span className="text-[10px] text-indigo-400 font-mono animate-pulse">Searching Google...</span>}
             </label>
             <div className="relative">
               <input
                 type="text"
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Warangal, Dallas TX"
+                onChange={(e) => {
+                  setLocation(e.target.value);
+                }}
+                onFocus={() => {
+                  if (predictions.length > 0) setShowDropdown(true);
+                }}
+                placeholder="Type any city (e.g. Warangal, Dallas, London)"
                 required
-                className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[#06080D] border border-white/[0.08] text-slate-100 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition font-medium shadow-inner"
+                className="w-full pl-9 pr-8 py-2.5 rounded-xl bg-[#06080D] border border-white/[0.08] text-slate-100 text-xs focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition font-medium shadow-inner"
               />
-              <MapPin className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+              <MapPin className="w-4 h-4 text-indigo-400 absolute left-3 top-2.5" />
+              {isSearchingPlaces && (
+                <Loader2 className="w-3.5 h-3.5 text-slate-400 animate-spin absolute right-3 top-3" />
+              )}
             </div>
+
+            {/* Live Autocomplete Dropdown List */}
+            {showDropdown && predictions.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#0B101D] border border-white/[0.12] rounded-2xl shadow-2xl overflow-hidden backdrop-blur-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="p-2 border-b border-white/[0.06] flex items-center justify-between text-[10px] font-mono text-slate-400 uppercase">
+                  <span>Google Places Suggestions</span>
+                  <span className="text-emerald-400">Live API</span>
+                </div>
+                <div className="max-h-56 overflow-y-auto divide-y divide-white/[0.04]">
+                  {predictions.map((p, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => handleSelectPrediction(p)}
+                      className="p-3 hover:bg-indigo-600/20 hover:text-indigo-200 cursor-pointer transition flex items-start gap-2.5 select-none"
+                    >
+                      <MapPin className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-slate-100 truncate">
+                          {p.main_text || p.description}
+                        </div>
+                        {p.secondary_text && (
+                          <div className="text-[11px] text-slate-400 truncate mt-0.5 font-normal">
+                            {p.secondary_text}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Radius Slider */}
