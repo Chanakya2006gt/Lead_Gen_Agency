@@ -5,6 +5,7 @@ import { Header } from "@/components/Header";
 import { ScanLauncher } from "@/components/ScanLauncher";
 import { LeadMatrixTable } from "@/components/LeadMatrixTable";
 import { LeadDossierModal } from "@/components/LeadDossierModal";
+import { LiveTerminal } from "@/components/LiveTerminal";
 import { Lead, DiscoveryScan, HumanStatus } from "@/core/db/schema";
 import { Loader2, RefreshCw, Layers, Sparkles } from "lucide-react";
 
@@ -121,6 +122,13 @@ export function DashboardClient() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
         {/* Discovery Launchpad */}
         <ScanLauncher onScanLaunched={handleScanLaunched} isLoading={isScanning} />
+
+        {/* Live Playwright Telemetry Drawer */}
+        <LiveTerminal
+          isScanning={isScanning}
+          niche={activeScan?.niche}
+          location={activeScan?.locationInput}
+        />
 
         {/* Scan Selector Tabs Bar */}
         {scans.length > 0 && (
