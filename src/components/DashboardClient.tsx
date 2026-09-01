@@ -89,6 +89,22 @@ export function DashboardClient() {
     fetchScanDetails(newScanId);
   };
 
+  const handleCancelScan = async () => {
+    if (!activeScanId) return;
+    try {
+      const res = await fetch(`/api/scans/${activeScanId}/cancel`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        setIsScanning(false);
+        fetchScanDetails(activeScanId);
+        fetchScans();
+      }
+    } catch (err) {
+      console.error("Failed to cancel scan:", err);
+    }
+  };
+
   const handleStatusChange = async (leadId: string, status: HumanStatus) => {
     try {
       const res = await fetch(`/api/leads/${leadId}/status`, {
@@ -124,7 +140,12 @@ export function DashboardClient() {
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
         {/* Discovery Launchpad */}
-        <ScanLauncher onScanLaunched={handleScanLaunched} isLoading={isScanning} />
+        <ScanLauncher
+          onScanLaunched={handleScanLaunched}
+          onCancelScan={handleCancelScan}
+          isLoading={isScanning}
+          activeScanId={activeScanId}
+        />
 
         {/* Live Pipeline Telemetry Drawer */}
         <LiveTerminal
@@ -181,23 +202,36 @@ export function DashboardClient() {
 
         {/* Live Ingestion / Audit Active Banner */}
         {isScanning && (
-          <div className="bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-indigo-950/60 border border-indigo-500/40 rounded-2xl p-4 flex items-center justify-between text-xs text-indigo-200 shadow-xl backdrop-blur-xl animate-pulse">
+          <div className="bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-indigo-950/60 border border-indigo-500/40 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs text-indigo-200 shadow-xl backdrop-blur-xl animate-pulse">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400">
+              <div className="w-8 h-8 rounded-lg bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0">
                 <Loader2 className="w-4 h-4 animate-spin" />
               </div>
               <div>
                 <span className="font-bold text-white block">
-                  Scraping &amp; Auditing Live Targets for {activeScan?.niche} in {activeScan?.locationInput}
+                  Scraping &amp; Auditing Live Targets for {activeScan?.niche || "Niche"} in {activeScan?.locationInput || "Market"}
                 </span>
                 <span className="text-[11px] text-indigo-300">
                   Executing Headless Chromium Dual-Viewport Audits across mobile &amp; desktop...
                 </span>
               </div>
             </div>
-            <span className="font-mono text-[10px] uppercase font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
-              13 Invariants Active
-            </span>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleCancelScan}
+                data-testid="btn-stop-active-scan"
+                className="px-3.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 font-bold flex items-center gap-1.5 transition text-xs active:scale-95 cursor-pointer shadow-lg"
+              >
+                <span className="w-2 h-2 rounded-sm bg-rose-400" />
+                <span>Stop Scan</span>
+              </button>
+
+              <span className="font-mono text-[10px] uppercase font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
+                13 Invariants Active
+              </span>
+            </div>
           </div>
         )}
 

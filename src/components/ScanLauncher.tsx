@@ -1,11 +1,27 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { Search, Loader2, Sparkles, MapPin, Sliders, Globe, Radio, Flame, ShieldAlert, Cpu, ArrowRight, Check } from "lucide-react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import {
+  Search,
+  Loader2,
+  Sparkles,
+  MapPin,
+  Square,
+  Navigation,
+  Check,
+  Building2,
+  Stethoscope,
+  Hammer,
+  Wind,
+  Sun,
+  Scissors
+} from "lucide-react";
 
 interface ScanLauncherProps {
   onScanLaunched: (scanId: string) => void;
+  onCancelScan?: () => void;
   isLoading: boolean;
+  activeScanId?: string | null;
 }
 
 interface PlacePrediction {
@@ -15,21 +31,68 @@ interface PlacePrediction {
   secondary_text?: string;
 }
 
-const PRESETS = [
-  { niche: "Dental Clinics", location: "Warangal", radius: 15, tag: "Healthcare" },
-  { niche: "Roofing Contractors", location: "Dallas, TX", radius: 25, tag: "Home Services" },
-  { niche: "HVAC Specialists", location: "Austin, TX", radius: 20, tag: "HVAC" },
-  { niche: "Solar Installers", location: "Phoenix, AZ", radius: 30, tag: "Energy" },
-  { niche: "Luxury Hair Salons", location: "Miami, FL", radius: 15, tag: "Beauty & Spa" },
+// High-ticket service verticals for local client acquisition
+const HIGH_TICKET_NICHES = [
+  { niche: "Dental Clinics", icon: Stethoscope, tag: "Healthcare" },
+  { niche: "Roofing Contractors", icon: Hammer, tag: "Home Services" },
+  { niche: "HVAC Specialists", icon: Wind, tag: "HVAC" },
+  { niche: "Solar Installers", icon: Sun, tag: "Energy" },
+  { niche: "Cosmetic Surgery", icon: Sparkles, tag: "Medical Spa" },
+  { niche: "Luxury Hair Salons", icon: Scissors, tag: "Beauty & Spa" },
 ];
 
-export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
+/**
+ * Infer a regional city from the browser's timezone if GPS is not yet granted
+ */
+function getInitialCityFromTimezone(): string {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (tz.includes("Kolkata") || tz.includes("Calcutta") || tz.includes("India")) {
+      return "Warangal, Telangana, India";
+    }
+    if (tz.includes("Chicago") || tz.includes("Central")) {
+      return "Dallas, TX, USA";
+    }
+    if (tz.includes("New_York") || tz.includes("Eastern")) {
+      return "New York, NY, USA";
+    }
+    if (tz.includes("Los_Angeles") || tz.includes("Pacific")) {
+      return "Los Angeles, CA, USA";
+    }
+    if (tz.includes("Phoenix") || tz.includes("Denver")) {
+      return "Phoenix, AZ, USA";
+    }
+    if (tz.includes("London") || tz.includes("Europe/London")) {
+      return "London, UK";
+    }
+    if (tz.includes("Paris") || tz.includes("Berlin")) {
+      return "Berlin, Germany";
+    }
+    if (tz.includes("Sydney") || tz.includes("Melbourne")) {
+      return "Sydney, Australia";
+    }
+    if (tz.includes("Dubai")) {
+      return "Dubai, UAE";
+    }
+    if (tz.includes("Singapore")) {
+      return "Singapore";
+    }
+  } catch {}
+  return "Warangal, Telangana, India";
+}
+
+export function ScanLauncher({ onScanLaunched, onCancelScan, isLoading, activeScanId }: ScanLauncherProps) {
+  const initialCity = useMemo(() => getInitialCityFromTimezone(), []);
   const [niche, setNiche] = useState("Dental Clinics");
-  const [location, setLocation] = useState("Warangal");
+  const [location, setLocation] = useState(initialCity);
   const [radiusKm, setRadiusKm] = useState(15);
   const [source, setSource] = useState<
     "google_places" | "live_google_maps" | "serpapi" | "mock" | "apify" | "outscraper"
   >("google_places");
+
+  // Geolocation & Auto-Detect state
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [locationDetected, setLocationDetected] = useState(false);
 
   // Autocomplete state
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -38,6 +101,73 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Extract a clean display city name for presets (e.g. "Warangal" from "Warangal, Telangana, India")
+  const currentCityShort = useMemo(() => {
+    if (!location.trim()) return "Local Market";
+    const parts = location.split(",");
+    return parts[0].trim();
+  }, [location]);
+
+  // Dynamically generate high-ticket niche presets for the active city
+  const dynamicPresets = useMemo(() => {
+    return HIGH_TICKET_NICHES.map((item) => ({
+      niche: item.niche,
+      location: location.trim() || initialCity,
+      radius: item.niche === "Solar Installers" || item.niche === "Roofing Contractors" ? 25 : 15,
+      tag: item.tag,
+      icon: item.icon,
+    }));
+  }, [location, initialCity]);
+
+  // Request browser GPS position and reverse-geocode
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      setErrorMessage("Geolocation is not supported by your browser.");
+      return;
+    }
+
+    setIsDetectingLocation(true);
+    setErrorMessage(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+
+          // Reverse geocode with OpenStreetMap Nominatim (Free, no key required)
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const address = data.address || {};
+            const city = address.city || address.town || address.village || address.county || address.state_district || "Detected City";
+            const state = address.state || "";
+            const country = address.country || "";
+            const fullLoc = [city, state, country].filter(Boolean).join(", ");
+            setLocation(fullLoc);
+            setLocationDetected(true);
+          } else {
+            // Fallback to coordinates
+            setLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+          }
+        } catch (err) {
+          console.error("Failed to reverse geocode:", err);
+          setLocation(getInitialCityFromTimezone());
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      (err) => {
+        console.warn("Geolocation permission dismissed/denied:", err.message);
+        setIsDetectingLocation(false);
+        // Retain current timezone-based location
+      },
+      { timeout: 8000, enableHighAccuracy: true }
+    );
+  };
 
   // Debounced Place Autocomplete Query
   useEffect(() => {
@@ -82,10 +212,11 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
   const handleSelectPrediction = (prediction: PlacePrediction) => {
     setLocation(prediction.description);
     setShowDropdown(false);
+    setIsFocused(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.SyntheticEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!niche.trim() || !location.trim()) return;
     setShowDropdown(false);
 
@@ -116,14 +247,13 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
 
   const applyPreset = (p: { niche: string; location: string; radius: number }) => {
     setNiche(p.niche);
-    setLocation(p.location);
     setRadiusKm(p.radius);
     setShowDropdown(false);
   };
 
   return (
     <div className="double-bezel-outer relative overflow-visible group">
-      {/* Dynamic Ambient Radial Mesh (10% Accent Layer) */}
+      {/* Dynamic Ambient Radial Mesh */}
       <div className="absolute -top-12 right-1/4 w-96 h-48 bg-gradient-to-br from-indigo-500/15 via-purple-500/10 to-transparent rounded-full blur-3xl pointer-events-none transition-all duration-700 group-hover:scale-110" />
 
       <div className="double-bezel-inner p-6 relative z-10">
@@ -140,19 +270,29 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
             </p>
           </div>
 
-          {/* Quick Market Presets */}
+          {/* Quick Markets Tailored to Current/Detected City */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-slate-500 font-mono text-[10px] uppercase font-bold mr-1">Quick Markets:</span>
-            {PRESETS.map((p, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => applyPreset(p)}
-                className="px-3 py-1.5 rounded-xl bg-white/[0.03] hover:bg-indigo-600/20 hover:text-indigo-300 border border-white/[0.08] hover:border-indigo-500/40 text-slate-300 transition-all duration-200 text-xs font-semibold active:scale-95 cursor-pointer shadow-sm"
-              >
-                {p.niche} · <span className="text-slate-500 font-mono">{p.location.split(",")[0]}</span>
-              </button>
-            ))}
+            <span className="text-slate-500 font-mono text-[10px] uppercase font-bold mr-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-indigo-400" /> High-Ticket Markets ({currentCityShort}):
+            </span>
+            {dynamicPresets.map((p, idx) => {
+              const Icon = p.icon;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => applyPreset(p)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all duration-200 active:scale-95 cursor-pointer shadow-sm flex items-center gap-1.5 ${
+                    niche === p.niche
+                      ? "bg-indigo-600/30 border-indigo-500/60 text-indigo-200"
+                      : "bg-white/[0.03] hover:bg-indigo-600/20 hover:text-indigo-300 border-white/[0.08] hover:border-indigo-500/40 text-slate-300"
+                  }`}
+                >
+                  <Icon className="w-3 h-3 text-indigo-400 shrink-0" />
+                  <span>{p.niche}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -186,11 +326,24 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
             </div>
           </div>
 
-          {/* Target City with Real-Time Google Places Autocomplete */}
+          {/* Target City with Real-Time Google Places Autocomplete & GPS Auto-Detect */}
           <div className="md:col-span-3 relative" ref={dropdownRef}>
-            <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold mb-1.5 flex justify-between">
-              <span>Target City (Search Worldwide)</span>
-              {isSearchingPlaces && <span className="text-[10px] text-indigo-400 font-mono animate-pulse">Searching Google...</span>}
+            <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold mb-1.5 flex justify-between items-center">
+              <span>Target City (Worldwide)</span>
+              <button
+                type="button"
+                onClick={handleDetectLocation}
+                disabled={isDetectingLocation}
+                className="text-[10px] font-mono text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer transition"
+                title="Detect exact GPS location"
+              >
+                {isDetectingLocation ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Navigation className="w-3 h-3 text-indigo-400" />
+                )}
+                <span>{isDetectingLocation ? "Detecting..." : "Auto-Detect"}</span>
+              </button>
             </label>
             <div className="relative">
               <input
@@ -285,24 +438,45 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
             </select>
           </div>
 
-          {/* Button-in-Button Launch CTA */}
-          <div className="md:col-span-2 flex items-end">
-            <button
-              type="button"
-              data-testid="btn-launch-discovery"
-              onClick={handleSubmit}
-              disabled={isLoading}
-              className="group w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold tracking-wide flex items-center justify-between shadow-[0_0_25px_rgba(99,102,241,0.35)] transition-all duration-300 active:scale-[0.98] cursor-pointer"
-            >
-              <span>{isLoading ? "Auditing Live..." : "Launch Discovery"}</span>
-              <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
-                {isLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                ) : (
-                  <Sparkles className="w-3.5 h-3.5 text-white" />
+          {/* Launch & Stop Scan CTA Controls */}
+          <div className="md:col-span-2 flex items-end gap-2">
+            {isLoading ? (
+              <>
+                <button
+                  type="button"
+                  disabled
+                  className="flex-1 py-2.5 px-3 rounded-xl bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold tracking-wide flex items-center justify-center gap-2 cursor-wait"
+                >
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                  <span>Auditing...</span>
+                </button>
+
+                {onCancelScan && (
+                  <button
+                    type="button"
+                    onClick={onCancelScan}
+                    data-testid="btn-cancel-scan"
+                    className="py-2.5 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 hover:text-rose-200 text-xs font-bold transition flex items-center gap-1.5 active:scale-95 cursor-pointer shadow-lg"
+                    title="Halt current scan"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-rose-400 text-rose-400" />
+                    <span>Stop</span>
+                  </button>
                 )}
-              </div>
-            </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                data-testid="btn-launch-discovery"
+                onClick={handleSubmit}
+                className="group w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold tracking-wide flex items-center justify-between shadow-[0_0_25px_rgba(99,102,241,0.35)] transition-all duration-300 active:scale-[0.98] cursor-pointer"
+              >
+                <span>Launch Discovery</span>
+                <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center group-hover:translate-x-0.5 transition-transform">
+                  <Sparkles className="w-3.5 h-3.5 text-white" />
+                </div>
+              </button>
+            )}
           </div>
         </form>
       </div>

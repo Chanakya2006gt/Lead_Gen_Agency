@@ -21,6 +21,24 @@ export interface ScanOptions {
 }
 
 export class ScanPipelineService {
+  private static activeControllers: Map<string, AbortController> = new Map();
+
+  /**
+   * Cancels a running scan and halts background audit loops immediately
+   */
+  public static async cancelScan(scanId: string): Promise<boolean> {
+    const controller = this.activeControllers.get(scanId);
+    if (controller) {
+      controller.abort();
+      this.activeControllers.delete(scanId);
+    }
+    db.update(discoveryScans)
+      .set({ status: "CANCELLED" })
+      .where(eq(discoveryScans.id, scanId))
+      .run();
+    return true;
+  }
+
   /**
    * Dispatches discovery & audit pipeline job in the background
    */
@@ -55,6 +73,9 @@ export class ScanPipelineService {
   }
 
   private static async runPipelineJob(scanId: string, options: ScanOptions): Promise<void> {
+    const abortController = new AbortController();
+    this.activeControllers.set(scanId, abortController);
+
     // Select Discovery Adapter
     let adapter: IDiscoveryAdapter;
     if (options.source === "google_places") {
@@ -68,7 +89,6 @@ export class ScanPipelineService {
     } else if (options.source === "mock") {
       adapter = new MockDiscoveryAdapter();
     } else {
-      // Default: Check if GOOGLE_MAPS_API_KEY exists; if so, use GooglePlacesApiAdapter, else Live Maps
       if (process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY) {
         adapter = new GooglePlacesApiAdapter();
       } else {
@@ -93,6 +113,11 @@ export class ScanPipelineService {
       return;
     }
 
+    if (abortController.signal.aborted) {
+      db.update(discoveryScans).set({ status: "CANCELLED" }).where(eq(discoveryScans.id, scanId)).run();
+      return;
+    }
+
     db.update(discoveryScans)
       .set({ rawDiscoveredCount: rawBusinesses.length })
       .where(eq(discoveryScans.id, scanId))
@@ -111,6 +136,12 @@ export class ScanPipelineService {
 
     try {
       for (const business of rawBusinesses) {
+        if (abortController.signal.aborted) {
+          console.log(`Scan ${scanId} was cancelled by operator.`);
+          db.update(discoveryScans).set({ status: "CANCELLED", qualifiedCount }).where(eq(discoveryScans.id, scanId)).run();
+          return;
+        }
+
         // Step B: Universal 13 Invariant Qualification
         const filterResult = UniversalFilterService.evaluate(business);
 
@@ -136,6 +167,11 @@ export class ScanPipelineService {
             console.warn(`Audit failed for ${business.name} (${business.websiteUrl}):`, auditErr);
             auditStatus = "FAILED";
           }
+        }
+
+        if (abortController.signal.aborted) {
+          db.update(discoveryScans).set({ status: "CANCELLED", qualifiedCount }).where(eq(discoveryScans.id, scanId)).run();
+          return;
         }
 
         // Step D: Grounded Dossier Synthesis & 4D Scoring
@@ -210,6 +246,7 @@ export class ScanPipelineService {
         .where(eq(discoveryScans.id, scanId))
         .run();
     } finally {
+      this.activeControllers.delete(scanId);
       await auditEngine.close();
     }
   }

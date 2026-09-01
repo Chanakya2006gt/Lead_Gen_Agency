@@ -43,7 +43,7 @@ export class MockDiscoveryAdapter implements IDiscoveryAdapter {
     return [
       {
         placeId: "mock_place_01",
-        name: `Apex ${niche} Specialists`,
+        name: `[DEMO] Apex ${niche} Specialists`,
         category: niche,
         rating: 4.85,
         reviewCount: 342,
@@ -55,7 +55,7 @@ export class MockDiscoveryAdapter implements IDiscoveryAdapter {
       },
       {
         placeId: "mock_place_02",
-        name: `Precision ${niche} Care Center`,
+        name: `[DEMO] Precision ${niche} Care Center`,
         category: niche,
         rating: 4.62,
         reviewCount: 184,
@@ -67,7 +67,7 @@ export class MockDiscoveryAdapter implements IDiscoveryAdapter {
       },
       {
         placeId: "mock_place_03",
-        name: `Elite ${niche} Custom Works`,
+        name: `[DEMO] Elite ${niche} Custom Works`,
         category: niche,
         rating: 4.91,
         reviewCount: 512,
@@ -79,7 +79,7 @@ export class MockDiscoveryAdapter implements IDiscoveryAdapter {
       },
       {
         placeId: "mock_place_04",
-        name: `Metro ${niche} Clinic`,
+        name: `[DEMO] Metro ${niche} Clinic`,
         category: niche,
         rating: 4.45,
         reviewCount: 96,
@@ -91,7 +91,7 @@ export class MockDiscoveryAdapter implements IDiscoveryAdapter {
       },
       {
         placeId: "mock_place_05",
-        name: `Heritage ${niche} Studio`,
+        name: `[DEMO] Heritage ${niche} Studio`,
         category: niche,
         rating: 4.7,
         reviewCount: 220,

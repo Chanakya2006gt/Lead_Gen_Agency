@@ -20,7 +20,8 @@
 | **AD-011** | 2026-09-02 | **SSRF Defense with DNS Pre-Resolution & Link Hop Filtering** | `PlaywrightAuditEngine` performs DNS resolution (`dns.lookup` with all addresses) before navigation, strictly blocking `127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `0.0.0.0/8`, and IPv6 `::1`, `fc00::/7`, `fe80::/10`. Added per-link SSRF checks on sample link HEAD verification to prevent 2nd-hop SSRF. | Naive hostname string check (Rejected: vulnerable to DNS rebinding and IP encodings). |
 | **AD-012** | 2026-09-02 | **Removal of Silent Mock Fallback** | Removed automatic fallback to mock engine when live scraping encounters blocks or failures. If discovery fails or is blocked, the scan explicitly fails or records 0 qualified leads with transparent error logging. | Silent fallback (Rejected: misleading to operators). |
 | **AD-013** | 2026-09-02 | **API Route Authorization & Token Isolation** | Protected `/api/scans`, `/api/scans/[id]`, `/api/leads/[id]/status`, `/api/leads/export`, and `/api/places/autocomplete` via `verifyApiAccess` supporting `LEAD_ENGINE_API_SECRET` via headers, bearer token, or secure cookies. | Unauthenticated public endpoints (Rejected: OWASP API security violation). |
-| **AD-014** | 2026-09-02 | **Multi-Scan History Retention & Schema Normalization** | Removed global uniqueness on `leads.place_id` across distinct scans so historical runs remain immutable and comparable over time. | Cross-scan upsert (Rejected: destroys past scan records). |
+| **AD-015** | 2026-09-02 | **Scan Cancellation Protocol & AbortController Pipeline** | Implemented `POST /api/scans/:id/cancel` and `AbortController` registration in `ScanPipelineService` allowing operators to instantly halt background crawling and headless Chromium audits with immediate status transition to `CANCELLED`. | Unstoppable background jobs (Rejected: wastes resources and locks UI). |
+| **AD-016** | 2026-09-02 | **Dynamic Location-Adaptive Presets & Geolocation Auto-Detect** | Replaced hardcoded city presets with location-adaptive suggestions dynamically mapped to the operator's active/detected city (via timezone inference and optional 1-click GPS reverse geocoding). | Static hardcoded cities (Rejected: poor operator experience outside demo cities). |
 
 ---
 
@@ -33,8 +34,8 @@
 - **`PlaywrightAuditEngine`**: Headless browser executor performing security, mobile viewport, speed, CTA, and broken link inspections with strict DNS pre-resolution SSRF defense.
 - **`OpportunityClassifier`**: Maps business profile and audit gaps into `WEBSITE`, `WEBSITE_AUTOMATION`, or `CUSTOM_OPERATIONAL_SOFTWARE`.
 - **`DossierSynthesizer`**: Compiles 4D scores (Reputation, Gap, Opportunity, Confidence) and formats multi-channel pitch scripts with zero hallucinations.
-- **`ScanPipelineService`**: Background pipeline orchestrator managing discovery, qualification, headless audits, and database persistence.
-- **`CommandCenterUI`**: Interactive Next.js 15 studio interface featuring live debounced Google Places autocomplete, real telemetry log streaming, dossier modal with copyable scripts, and responsive triage.
+- **`ScanPipelineService`**: Background pipeline orchestrator managing discovery, qualification, headless audits, scan cancellation (`cancelScan`), and database persistence.
+- **`CommandCenterUI`**: Interactive Next.js 15 studio interface featuring dynamic location auto-detect, location-adaptive market presets, active scan cancellation, live debounced Google Places autocomplete, real telemetry log streaming, dossier modal with copyable scripts, and responsive triage.
 
 ---
 
@@ -42,13 +43,13 @@
 
 ### Executed Shell Commands
 ```bash
-# 1. Vitest Unit & Integration Test Suite (19/19 tests passed)
+# 1. Vitest Unit & Integration Test Suite (19/19 tests passed in 2.18s)
 npm run test
 
-# 2. Production Next.js 15 Build (Clean build, 0 errors, 0 type warnings)
+# 2. Production Next.js 15 Build (Clean build, 0 errors, 0 type warnings in 3.0s)
 npm run build
 
-# 3. Playwright End-to-End Smoke & Audit Suite (4/4 tests passed in 3.1s)
+# 3. Playwright End-to-End Smoke & Audit Suite (4/4 tests passed in 9.7s)
 npm run test:e2e
 ```
 
@@ -56,6 +57,8 @@ npm run test:e2e
 - `GET /` — Executive Command Center Studio (200 OK with OWASP security headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`)
 - `POST /api/scans` — Live Scan Launch API (201 Created with schema validation & route authorization)
 - `GET /api/scans/:id` — Scan & Qualified Leads API (200 OK)
+- `POST /api/scans/:id/cancel` — Active Scan Cancellation API (200 OK with `status: CANCELLED`)
 - `PATCH /api/leads/:id/status` — Triage Status Update API (200 OK)
 - `GET /api/leads/export` — Lead CSV Export API (200 OK with `text/csv` attachment)
 - `GET /api/places/autocomplete` — Worldwide Google Places Autocomplete Endpoint (200 OK)
+
