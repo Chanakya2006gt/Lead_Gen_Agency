@@ -11,7 +11,7 @@ const createScanSchema = z.object({
   niche: z.string().min(2, "Niche must be at least 2 characters"),
   location: z.string().min(2, "Location must be at least 2 characters"),
   radiusKm: z.number().int().min(1).max(100).default(15),
-  source: z.enum(["live_google_maps", "serpapi", "mock", "apify", "outscraper"]).default("live_google_maps"),
+  source: z.enum(["google_places", "live_google_maps", "serpapi", "mock", "apify", "outscraper"]).default("live_google_maps"),
 });
 
 export async function GET() {

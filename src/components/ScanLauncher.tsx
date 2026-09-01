@@ -21,8 +21,8 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
   const [location, setLocation] = useState("Warangal");
   const [radiusKm, setRadiusKm] = useState(15);
   const [source, setSource] = useState<
-    "live_google_maps" | "serpapi" | "mock" | "apify" | "outscraper"
-  >("live_google_maps");
+    "google_places" | "live_google_maps" | "serpapi" | "mock" | "apify" | "outscraper"
+  >("google_places");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,6 +159,7 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
               onChange={(e) => setSource(e.target.value as any)}
               className="w-full px-2 py-2.5 rounded-xl bg-[#06080D] border border-white/[0.08] text-slate-300 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer font-medium"
             >
+              <option value="google_places">Google Places API (Direct Key)</option>
               <option value="live_google_maps">Real-Time Maps (Browser)</option>
               <option value="serpapi">SerpAPI (Google Maps API)</option>
               <option value="apify">Apify Actor API</option>

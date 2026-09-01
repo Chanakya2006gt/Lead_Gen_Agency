@@ -2,6 +2,7 @@ import { db } from "@/core/db";
 import { discoveryScans, leads } from "@/core/db/schema";
 import { eq } from "drizzle-orm";
 import { IDiscoveryAdapter } from "@/features/discovery/types";
+import { GooglePlacesApiAdapter } from "@/features/discovery/GooglePlacesApiAdapter";
 import { MockDiscoveryAdapter } from "@/features/discovery/MockDiscoveryAdapter";
 import { LiveGoogleMapsAdapter } from "@/features/discovery/LiveGoogleMapsAdapter";
 import { SerpApiGoogleMapsAdapter } from "@/features/discovery/SerpApiGoogleMapsAdapter";
@@ -16,7 +17,7 @@ export interface ScanOptions {
   niche: string;
   location: string;
   radiusKm?: number;
-  source?: "live_google_maps" | "serpapi" | "mock" | "apify" | "outscraper";
+  source?: "google_places" | "live_google_maps" | "serpapi" | "mock" | "apify" | "outscraper";
 }
 
 export class ScanPipelineService {
@@ -56,7 +57,9 @@ export class ScanPipelineService {
   private static async runPipelineJob(scanId: string, options: ScanOptions): Promise<void> {
     // Select Discovery Adapter
     let adapter: IDiscoveryAdapter;
-    if (options.source === "serpapi") {
+    if (options.source === "google_places") {
+      adapter = new GooglePlacesApiAdapter();
+    } else if (options.source === "serpapi") {
       adapter = new SerpApiGoogleMapsAdapter();
     } else if (options.source === "apify") {
       adapter = new ApifyMapsAdapter();
@@ -65,8 +68,12 @@ export class ScanPipelineService {
     } else if (options.source === "mock") {
       adapter = new MockDiscoveryAdapter();
     } else {
-      // Default: Live Real-Time Google Maps Scraper (Native Playwright)
-      adapter = new LiveGoogleMapsAdapter();
+      // Default: Check if GOOGLE_MAPS_API_KEY exists; if so, use GooglePlacesApiAdapter, else Live Maps
+      if (process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY) {
+        adapter = new GooglePlacesApiAdapter();
+      } else {
+        adapter = new LiveGoogleMapsAdapter();
+      }
     }
 
     // Step A: Ingest raw business records
