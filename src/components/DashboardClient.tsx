@@ -7,7 +7,7 @@ import { LeadMatrixTable } from "@/components/LeadMatrixTable";
 import { LeadDossierModal } from "@/components/LeadDossierModal";
 import { LiveTerminal } from "@/components/LiveTerminal";
 import { Lead, DiscoveryScan, HumanStatus } from "@/core/db/schema";
-import { Loader2, RefreshCw, Layers, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, Layers, Sparkles, X } from "lucide-react";
 
 export function DashboardClient() {
   const [scans, setScans] = useState<DiscoveryScan[]>([]);
@@ -105,6 +105,31 @@ export function DashboardClient() {
     }
   };
 
+  const handleDeleteScan = async (scanId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await fetch(`/api/scans/${scanId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        const remaining = scans.filter((s) => s.id !== scanId);
+        setScans(remaining);
+        if (activeScanId === scanId) {
+          if (remaining.length > 0) {
+            setActiveScanId(remaining[0].id);
+            fetchScanDetails(remaining[0].id);
+          } else {
+            setActiveScanId(null);
+            setActiveScan(null);
+            setLeads([]);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete scan:", err);
+    }
+  };
+
   const handleStatusChange = async (leadId: string, status: HumanStatus) => {
     try {
       const res = await fetch(`/api/leads/${leadId}/status`, {
@@ -163,13 +188,13 @@ export function DashboardClient() {
               {scans.map((scan) => {
                 const isActive = scan.id === activeScanId;
                 return (
-                  <button
+                  <div
                     key={scan.id}
                     onClick={() => setActiveScanId(scan.id)}
-                    className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer ${
+                    className={`group/tab relative px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer select-none ${
                       isActive
-                        ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.15)]"
-                        : "bg-[#0D131F] hover:bg-white/[0.04] text-slate-400 border border-white/[0.08]"
+                        ? "bg-indigo-600/25 text-indigo-200 border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                        : "bg-[#0D131F] hover:bg-white/[0.05] text-slate-400 hover:text-slate-200 border border-white/[0.08]"
                     }`}
                   >
                     <span>
@@ -182,7 +207,17 @@ export function DashboardClient() {
                         {scan.qualifiedCount} leads
                       </span>
                     )}
-                  </button>
+
+                    {/* Delete Scan / Close Tab Button */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteScan(scan.id, e)}
+                      className="opacity-50 group-hover/tab:opacity-100 p-0.5 rounded-md hover:bg-rose-500/25 hover:text-rose-300 text-slate-400 transition cursor-pointer ml-0.5"
+                      title="Delete this scan"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 );
               })}
             </div>

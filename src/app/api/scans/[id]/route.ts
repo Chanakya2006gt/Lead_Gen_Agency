@@ -43,3 +43,30 @@ export async function GET(
     return NextResponse.json({ error: "Failed to retrieve scan details" }, { status: 500 });
   }
 }
+
+export async function DELETE(
+  request: Request,
+  props: { params: Promise<{ id: string }> }
+) {
+  const authError = verifyApiAccess(request);
+  if (authError) return authError;
+
+  try {
+    const params = await props.params;
+    const scanId = params.id;
+
+    // Delete leads associated with this scan
+    db.delete(leads).where(eq(leads.scanId, scanId)).run();
+    // Delete the scan record
+    db.delete(discoveryScans).where(eq(discoveryScans.id, scanId)).run();
+
+    return NextResponse.json({
+      success: true,
+      message: "Scan deleted successfully",
+      scanId,
+    });
+  } catch (err: any) {
+    console.error("DELETE /api/scans/[id] error:", err);
+    return NextResponse.json({ error: "Failed to delete scan" }, { status: 500 });
+  }
+}

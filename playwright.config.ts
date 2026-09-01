@@ -6,7 +6,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || "http://localhost:3000",
+    baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || "http://localhost:3098",
     trace: "on-first-retry",
   },
   projects: [
@@ -16,8 +16,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "PLAYWRIGHT_TEST=1 npm run dev",
-    url: "http://localhost:3000",
+    command: "PORT=3098 PLAYWRIGHT_TEST=1 npx next dev -p 3098",
+    url: "http://localhost:3098",
     reuseExistingServer: true,
     timeout: 120000,
   },
