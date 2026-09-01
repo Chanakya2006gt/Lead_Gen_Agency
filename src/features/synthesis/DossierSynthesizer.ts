@@ -94,7 +94,54 @@ export class DossierSynthesizer {
       estimatedValueRange = "$2,500 – $5,000 (Target Scope Benchmark)";
     }
 
-    const executiveSummary = `${params.name} is a high-reputation ${params.category || "local business"} (${params.rating}★, ${params.reviewCount} reviews) with high customer trust but a substantial ${opportunityType.replace(/_/g, " ")} gap. Resolving these bottlenecks directly increases captured mobile bookings.`;
+    let executiveSummary = `${params.name} is a high-reputation ${params.category || "local business"} (${params.rating}★, ${params.reviewCount} reviews) with high customer trust but a substantial ${opportunityType.replace(/_/g, " ")} gap. Resolving these bottlenecks directly increases captured mobile bookings.`;
+
+    // 2. Optional OpenAI LLM Enhancement (if OPENAI_API_KEY is configured)
+    if (apiKey && apiKey.trim().length > 0) {
+      try {
+        const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey.trim()}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are an elite B2B sales strategist for digital agencies. Generate concise, punchy executive pitch copy for a local business lead.",
+              },
+              {
+                role: "user",
+                content: `Business: ${params.name}
+Category: ${params.category}
+Rating: ${params.rating}★ (${params.reviewCount} reviews)
+Has Website: ${params.hasWebsite}
+Audit Bottlenecks: ${identifiedBottlenecks.join("; ")}
+Opportunity Tier: ${opportunityType}
+
+Output a 2-sentence executive summary highlighting their exact commercial bottleneck and how fixing it unlocks revenue.`,
+              },
+            ],
+            temperature: 0.3,
+            max_tokens: 150,
+          }),
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const aiSummary = json.choices?.[0]?.message?.content?.trim();
+          if (aiSummary) {
+            executiveSummary = aiSummary;
+          }
+        }
+      } catch (llmErr) {
+        console.warn("OpenAI synthesis call skipped, using deterministic summary:", llmErr);
+      }
+    }
 
     return {
       reputationScore: scores.reputationScore,
