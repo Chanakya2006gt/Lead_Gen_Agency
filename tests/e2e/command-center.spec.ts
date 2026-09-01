@@ -20,6 +20,18 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
         await mockServer.stop();
       } catch {}
     }
+    try {
+      const { db } = await import("../../src/core/db");
+      const { discoveryScans, leads } = await import("../../src/core/db/schema");
+      const { like, eq } = await import("drizzle-orm");
+      const demoLeads = db.select().from(leads).where(like(leads.name, "%[DEMO]%")).all();
+      for (const dl of demoLeads) {
+        if (dl.scanId) {
+          db.delete(discoveryScans).where(eq(discoveryScans.id, dl.scanId)).run();
+          db.delete(leads).where(eq(leads.scanId, dl.scanId)).run();
+        }
+      }
+    } catch {}
   });
 
   test("Dashboard loads with clean security headers, studio layout, and launchpad", async ({

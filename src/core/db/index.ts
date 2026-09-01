@@ -4,7 +4,8 @@ import * as schema from "./schema";
 import path from "path";
 import fs from "fs";
 
-const databaseUrl = process.env.DATABASE_URL || "./lead_engine.db";
+const isTestEnv = process.env.NODE_ENV === "test" || process.env.PLAYWRIGHT_TEST === "1";
+const databaseUrl = process.env.DATABASE_URL || (isTestEnv ? "./lead_engine_test.db" : "./lead_engine.db");
 const dbPath = databaseUrl.startsWith("postgres") ? path.join(process.cwd(), "lead_engine.db") : databaseUrl;
 
 const dir = path.dirname(dbPath);

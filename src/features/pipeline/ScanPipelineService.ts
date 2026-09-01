@@ -135,102 +135,107 @@ export class ScanPipelineService {
     let qualifiedCount = 0;
 
     try {
-      for (const business of rawBusinesses) {
+      // Step B: Filter qualified businesses using 13 Universal Invariants
+      const qualifiedItems = rawBusinesses
+        .map((business) => ({ business, filterResult: UniversalFilterService.evaluate(business) }))
+        .filter((item) => item.filterResult.qualified);
+
+      // Process audits in parallel concurrency batches (3 at a time) for speed
+      const BATCH_SIZE = 3;
+      for (let i = 0; i < qualifiedItems.length; i += BATCH_SIZE) {
         if (abortController.signal.aborted) {
           console.log(`Scan ${scanId} was cancelled by operator.`);
           db.update(discoveryScans).set({ status: "CANCELLED", qualifiedCount }).where(eq(discoveryScans.id, scanId)).run();
           return;
         }
 
-        // Step B: Universal 13 Invariant Qualification
-        const filterResult = UniversalFilterService.evaluate(business);
+        const batch = qualifiedItems.slice(i, i + BATCH_SIZE);
 
-        if (!filterResult.qualified) {
-          continue; // Hard gate rejection
-        }
+        await Promise.all(
+          batch.map(async ({ business, filterResult }) => {
+            if (abortController.signal.aborted) return;
 
-        qualifiedCount++;
-        const leadId = crypto.randomUUID();
+            qualifiedCount++;
+            const leadId = crypto.randomUUID();
 
-        // Step C: Headless Audit or No-Website Fast Track
-        let auditStatus: "PENDING" | "NO_WEBSITE" | "AUDITED" | "FAILED" = "PENDING";
-        let auditTelemetry = null;
+            // Step C: Headless Audit or No-Website Fast Track
+            let auditStatus: "PENDING" | "NO_WEBSITE" | "AUDITED" | "FAILED" = "PENDING";
+            let auditTelemetry = null;
 
-        if (!filterResult.hasWebsite) {
-          auditStatus = "NO_WEBSITE";
-        } else if (business.websiteUrl) {
-          try {
-            const allowLocalhost = options.source === "mock" || process.env.NODE_ENV === "test";
-            auditTelemetry = await auditEngine.auditUrl(business.websiteUrl, allowLocalhost);
-            auditStatus = "AUDITED";
-          } catch (auditErr) {
-            console.warn(`Audit failed for ${business.name} (${business.websiteUrl}):`, auditErr);
-            auditStatus = "FAILED";
-          }
-        }
+            if (!filterResult.hasWebsite) {
+              auditStatus = "NO_WEBSITE";
+            } else if (business.websiteUrl) {
+              try {
+                const allowLocalhost = options.source === "mock" || process.env.NODE_ENV === "test";
+                auditTelemetry = await auditEngine.auditUrl(business.websiteUrl, allowLocalhost);
+                auditStatus = "AUDITED";
+              } catch (auditErr) {
+                console.warn(`Audit failed for ${business.name} (${business.websiteUrl}):`, auditErr);
+                auditStatus = "FAILED";
+              }
+            }
 
-        if (abortController.signal.aborted) {
-          db.update(discoveryScans).set({ status: "CANCELLED", qualifiedCount }).where(eq(discoveryScans.id, scanId)).run();
-          return;
-        }
+            if (abortController.signal.aborted) return;
 
-        // Step D: Grounded Dossier Synthesis & 4D Scoring
-        const dossier = await DossierSynthesizer.synthesize(
-          {
-            name: business.name,
-            category: business.category || options.niche,
-            rating: filterResult.rating,
-            reviewCount: filterResult.reviewCount,
-            reviewTrend: filterResult.reviewTrend,
-            reviewsLast30Days: filterResult.reviewsLast30Days,
-            reviewsLast90Days: filterResult.reviewsLast90Days,
-            hasWebsite: filterResult.hasWebsite,
-            websiteUrl: business.websiteUrl,
-            phone: business.phone,
-            formattedAddress: business.formattedAddress,
-            auditTelemetry,
-          },
-          process.env.OPENAI_API_KEY
+            // Step D: Grounded Dossier Synthesis & 4D Scoring
+            const dossier = await DossierSynthesizer.synthesize(
+              {
+                name: business.name,
+                category: business.category || options.niche,
+                rating: filterResult.rating,
+                reviewCount: filterResult.reviewCount,
+                reviewTrend: filterResult.reviewTrend,
+                reviewsLast30Days: filterResult.reviewsLast30Days,
+                reviewsLast90Days: filterResult.reviewsLast90Days,
+                hasWebsite: filterResult.hasWebsite,
+                websiteUrl: business.websiteUrl,
+                phone: business.phone,
+                formattedAddress: business.formattedAddress,
+                auditTelemetry,
+              },
+              process.env.OPENAI_API_KEY
+            );
+
+            const now = new Date().toISOString();
+
+            // Step E: Persist Qualified Lead
+            db.insert(leads)
+              .values({
+                id: leadId,
+                scanId,
+                placeId: business.placeId,
+                name: business.name,
+                category: business.category || options.niche,
+                formattedAddress: business.formattedAddress || null,
+                phone: business.phone || null,
+                googleMapsUrl: business.googleMapsUrl || null,
+                websiteUrl: business.websiteUrl || null,
+                rating: filterResult.rating,
+                reviewCount: filterResult.reviewCount,
+                lastReviewDate: filterResult.lastReviewDate || null,
+                reviewsLast30Days: filterResult.reviewsLast30Days,
+                reviewsLast90Days: filterResult.reviewsLast90Days,
+                reviewsLast180Days: filterResult.reviewsLast180Days,
+                reviewTrend: filterResult.reviewTrend,
+                hasWebsite: filterResult.hasWebsite,
+                auditStatus,
+                auditTelemetry: auditTelemetry as any,
+                reputationScore: dossier.reputationScore,
+                digitalGapScore: dossier.digitalGapScore,
+                opportunityScore: dossier.opportunityScore,
+                confidenceScore: dossier.confidenceScore,
+                totalLeadScore: dossier.overallLeadScore,
+                opportunityType: dossier.opportunityType,
+                dossier: dossier as any,
+                humanStatus: "NEW",
+                createdAt: now,
+                updatedAt: now,
+              })
+              .run();
+          })
         );
 
-        const now = new Date().toISOString();
-
-        // Step E: Persist Qualified Lead
-        db.insert(leads)
-          .values({
-            id: leadId,
-            scanId,
-            placeId: business.placeId,
-            name: business.name,
-            category: business.category || options.niche,
-            formattedAddress: business.formattedAddress || null,
-            phone: business.phone || null,
-            googleMapsUrl: business.googleMapsUrl || null,
-            websiteUrl: business.websiteUrl || null,
-            rating: filterResult.rating,
-            reviewCount: filterResult.reviewCount,
-            lastReviewDate: filterResult.lastReviewDate || null,
-            reviewsLast30Days: filterResult.reviewsLast30Days,
-            reviewsLast90Days: filterResult.reviewsLast90Days,
-            reviewsLast180Days: filterResult.reviewsLast180Days,
-            reviewTrend: filterResult.reviewTrend,
-            hasWebsite: filterResult.hasWebsite,
-            auditStatus,
-            auditTelemetry: auditTelemetry as any,
-            reputationScore: dossier.reputationScore,
-            digitalGapScore: dossier.digitalGapScore,
-            opportunityScore: dossier.opportunityScore,
-            confidenceScore: dossier.confidenceScore,
-            totalLeadScore: dossier.overallLeadScore,
-            opportunityType: dossier.opportunityType,
-            dossier: dossier as any,
-            humanStatus: "NEW",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .run();
-
-        // Update running qualified count on scan record
+        // Update running qualified count on scan record after each batch
         db.update(discoveryScans)
           .set({ qualifiedCount })
           .where(eq(discoveryScans.id, scanId))
