@@ -47,7 +47,6 @@ export function LeadDossierModal({ lead, onClose, onStatusChange }: LeadDossierM
   const findings: AuditFinding[] = telemetry?.findings || [];
   const pitch = dossier?.recommendedPitch;
 
-  // Formatted cold email script
   const coldEmailCopy = `Subject: Quick question regarding ${lead.name}'s mobile booking flow
 
 Hi ${lead.name} team,
@@ -56,7 +55,8 @@ I was looking at top-rated ${lead.category || "businesses"} in ${lead.formattedA
 
 I ran a quick technical audit on your digital presence and noticed a specific bottleneck:
 ${lead.hasWebsite
-  ? `• ${pitch?.identifiedBottlenecks?.[0] || "Mobile layout is unoptimized for touch booking"}\n• ${pitch?.identifiedBottlenecks?.[1] || "Missing direct online scheduling/intake"}`
+  ? `• ${pitch?.identifiedBottlenecks?.[0] || "Mobile layout is unoptimized for touch booking"}
+• ${pitch?.identifiedBottlenecks?.[1] || "Missing direct online scheduling/intake"}`
   : "• You currently have no official website linked to your Google Business profile, leaking high-intent mobile searchers to competitors."}
 
 We build modern, high-converting digital storefronts and booking systems. For ${lead.name}, our proposed scope is:

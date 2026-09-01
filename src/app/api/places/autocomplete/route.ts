@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
+import { verifyApiAccess } from "@/core/auth/verifyAccess";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const authError = verifyApiAccess(request);
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(request.url);
     const input = searchParams.get("input");
@@ -17,30 +21,7 @@ export async function GET(request: Request) {
       process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
     if (!apiKey) {
-      // Fallback popular cities if API key is not yet set
-      const commonCities = [
-        "Warangal, Telangana, India",
-        "Hyderabad, Telangana, India",
-        "Bengaluru, Karnataka, India",
-        "Mumbai, Maharashtra, India",
-        "Delhi, India",
-        "Dallas, TX, USA",
-        "Austin, TX, USA",
-        "Phoenix, AZ, USA",
-        "Miami, FL, USA",
-        "New York, NY, USA",
-        "London, United Kingdom",
-        "Dubai, United Arab Emirates",
-        "Toronto, ON, Canada",
-        "Sydney, Australia",
-      ];
-      const filtered = commonCities
-        .filter((c) => c.toLowerCase().includes(input.toLowerCase()))
-        .map((description) => ({
-          description,
-          place_id: `fallback_${Buffer.from(description).toString("hex").substring(0, 12)}`,
-        }));
-      return NextResponse.json({ predictions: filtered });
+      return NextResponse.json({ predictions: [] });
     }
 
     // Call Google Places Autocomplete API (cities and regions)
@@ -64,6 +45,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ predictions });
   } catch (err: any) {
     console.error("Places autocomplete error:", err);
-    return NextResponse.json({ predictions: [], error: err.message }, { status: 500 });
+    return NextResponse.json({ predictions: [] });
   }
 }

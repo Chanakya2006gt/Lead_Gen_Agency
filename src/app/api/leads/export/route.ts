@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { db } from "@/core/db";
 import { leads, Lead } from "@/core/db/schema";
+import { verifyApiAccess } from "@/core/auth/verifyAccess";
 import { desc, eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const authError = verifyApiAccess(request);
+  if (authError) return authError;
+
   try {
     const { searchParams } = new URL(request.url);
     const scanId = searchParams.get("scanId");
@@ -56,8 +60,8 @@ export async function GET(request: Request) {
         l.opportunityType,
         l.rating,
         l.reviewCount,
-        l.reviewsLast30Days ?? 0,
-        l.reviewsLast90Days ?? 0,
+        l.reviewsLast30Days !== null ? l.reviewsLast30Days : "N/A",
+        l.reviewsLast90Days !== null ? l.reviewsLast90Days : "N/A",
         l.reviewTrend,
         l.hasWebsite ? "YES" : "NO",
         `"${(l.websiteUrl || "").replace(/"/g, '""')}"`,
@@ -78,6 +82,7 @@ export async function GET(request: Request) {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("GET /api/leads/export error:", err);
+    return NextResponse.json({ error: "Failed to export leads" }, { status: 500 });
   }
 }

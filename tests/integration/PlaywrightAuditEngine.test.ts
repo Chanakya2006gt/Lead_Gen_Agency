@@ -22,7 +22,7 @@ describe("PlaywrightAuditEngine Integration Test", () => {
   });
 
   it("Accurately audits broken legacy site: missing viewport, layout overflow, missing CTA, broken links", async () => {
-    const telemetry = await auditEngine.auditUrl("http://localhost:3099/sites/broken-legacy");
+    const telemetry = await auditEngine.auditUrl("http://localhost:3099/sites/broken-legacy", true);
 
     expect(telemetry.viewportMetaPresent).toBe(false);
     expect(telemetry.hasHorizontalOverflow).toBe(true);
@@ -37,7 +37,7 @@ describe("PlaywrightAuditEngine Integration Test", () => {
   });
 
   it("Detects WhatsApp integration and mobile viewport on WhatsApp site", async () => {
-    const telemetry = await auditEngine.auditUrl("http://localhost:3099/sites/whatsapp-heavy");
+    const telemetry = await auditEngine.auditUrl("http://localhost:3099/sites/whatsapp-heavy", true);
 
     expect(telemetry.viewportMetaPresent).toBe(true);
     expect(telemetry.hasHorizontalOverflow).toBe(false);
@@ -46,9 +46,18 @@ describe("PlaywrightAuditEngine Integration Test", () => {
     expect(telemetry.hasInteractiveBookingForm).toBe(false);
   });
 
-  it("Enforces SSRF validation against cloud metadata endpoints", async () => {
+  it("Enforces strict SSRF validation against cloud metadata endpoints", async () => {
     await expect(auditEngine.auditUrl("http://169.254.169.254/latest/meta-data")).rejects.toThrow(
-      /Forbidden target hostname/
+      /Forbidden private or metadata IP target/
+    );
+  });
+
+  it("Enforces strict SSRF validation against RFC1918 private IP ranges", async () => {
+    await expect(auditEngine.auditUrl("http://192.168.1.1/admin")).rejects.toThrow(
+      /Forbidden private or metadata IP target/
+    );
+    await expect(auditEngine.auditUrl("http://10.0.0.1/status")).rejects.toThrow(
+      /Forbidden private or metadata IP target/
     );
   });
 });

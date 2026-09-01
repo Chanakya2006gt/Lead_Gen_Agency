@@ -23,9 +23,9 @@ export interface FilterResult {
   rating: number;
   reviewCount: number;
   lastReviewDate?: string | null;
-  reviewsLast30Days: number;
-  reviewsLast90Days: number;
-  reviewsLast180Days: number;
+  reviewsLast30Days: number | null;
+  reviewsLast90Days: number | null;
+  reviewsLast180Days: number | null;
   reviewTrend: ReviewTrend;
   hasWebsite: boolean;
 }
@@ -44,88 +44,86 @@ export class UniversalFilterService {
         business.websiteUrl.toLowerCase() !== "null"
     );
 
-    // Gate 1: Star Rating Hard Threshold
-    if (business.rating < this.MIN_RATING) {
+    // Gate 1: Star Rating Hard Threshold (>= 4.0)
+    if (typeof business.rating !== "number" || isNaN(business.rating) || business.rating < this.MIN_RATING) {
       return {
         qualified: false,
         unqualifiedReason: `Rating (${business.rating}) is below required minimum threshold (${this.MIN_RATING})`,
-        rating: business.rating,
-        reviewCount: business.reviewCount,
-        reviewsLast30Days: 0,
-        reviewsLast90Days: 0,
-        reviewsLast180Days: 0,
+        rating: business.rating || 0,
+        reviewCount: business.reviewCount || 0,
+        reviewsLast30Days: null,
+        reviewsLast90Days: null,
+        reviewsLast180Days: null,
         reviewTrend: "UNKNOWN",
         hasWebsite,
       };
     }
 
-    // Gate 2: Review Volume Hard Threshold
-    if (business.reviewCount < this.MIN_REVIEW_COUNT) {
+    // Gate 2: Review Volume Hard Threshold (>= 50)
+    if (typeof business.reviewCount !== "number" || isNaN(business.reviewCount) || business.reviewCount < this.MIN_REVIEW_COUNT) {
       return {
         qualified: false,
         unqualifiedReason: `Review count (${business.reviewCount}) is below required minimum threshold (${this.MIN_REVIEW_COUNT})`,
         rating: business.rating,
-        reviewCount: business.reviewCount,
-        reviewsLast30Days: 0,
-        reviewsLast90Days: 0,
-        reviewsLast180Days: 0,
+        reviewCount: business.reviewCount || 0,
+        reviewsLast30Days: null,
+        reviewsLast90Days: null,
+        reviewsLast180Days: null,
         reviewTrend: "UNKNOWN",
         hasWebsite,
       };
     }
 
-    // Gate 3: Mandatory Review Recency & Velocity Invariants
-    const reviews = business.reviews || [];
+    // Gate 3: Empirical Review Recency (Only computed if raw timestamps exist)
+    const rawReviews = business.reviews || [];
     let lastReviewDate: string | null = null;
-    let reviewsLast30Days = 0;
-    let reviewsLast90Days = 0;
-    let reviewsLast180Days = 0;
+    let reviewsLast30Days: number | null = null;
+    let reviewsLast90Days: number | null = null;
+    let reviewsLast180Days: number | null = null;
+    let reviewTrend: ReviewTrend = "UNKNOWN";
 
     const refTime = referenceDate.getTime();
     const MS_PER_DAY = 1000 * 60 * 60 * 24;
-
     const timestamps: number[] = [];
 
-    for (const r of reviews) {
+    for (const r of rawReviews) {
       if (!r.publishedAtDate) continue;
       const t = new Date(r.publishedAtDate).getTime();
       if (!isNaN(t)) {
         timestamps.push(t);
-        const ageDays = (refTime - t) / MS_PER_DAY;
-        if (ageDays <= 30) reviewsLast30Days++;
-        if (ageDays <= 90) reviewsLast90Days++;
-        if (ageDays <= 180) reviewsLast180Days++;
       }
     }
 
     if (timestamps.length > 0) {
       timestamps.sort((a, b) => b - a);
       lastReviewDate = new Date(timestamps[0]).toISOString();
-    } else {
-      // If review dates are not provided in raw record, estimate recency buckets from volume
-      reviewsLast30Days = Math.max(1, Math.min(15, Math.floor(business.reviewCount * 0.05)));
-      reviewsLast90Days = Math.max(reviewsLast30Days, Math.min(45, Math.floor(business.reviewCount * 0.12)));
-      reviewsLast180Days = Math.max(reviewsLast90Days, Math.min(90, Math.floor(business.reviewCount * 0.22)));
-      lastReviewDate = new Date(refTime - 1000 * 60 * 60 * 24 * 7).toISOString();
-    }
+      reviewsLast30Days = 0;
+      reviewsLast90Days = 0;
+      reviewsLast180Days = 0;
 
-    // Determine Velocity Trend: Rv = reviewsLast30Days / (reviewsLast90Days / 3)
-    const baselineMonthlyVelocity = reviewsLast90Days / 3;
-    let reviewTrend: ReviewTrend = "UNKNOWN";
-
-    if (baselineMonthlyVelocity > 0) {
-      const velocityRatio = reviewsLast30Days / baselineMonthlyVelocity;
-      if (velocityRatio > 1.25) {
-        reviewTrend = "GROWING";
-      } else if (velocityRatio >= 0.75) {
-        reviewTrend = "STABLE";
-      } else if (velocityRatio > 0.2) {
-        reviewTrend = "DECLINING";
-      } else {
-        reviewTrend = "STALE";
+      for (const t of timestamps) {
+        const ageDays = (refTime - t) / MS_PER_DAY;
+        if (ageDays <= 30) reviewsLast30Days++;
+        if (ageDays <= 90) reviewsLast90Days++;
+        if (ageDays <= 180) reviewsLast180Days++;
       }
-    } else {
-      reviewTrend = reviewsLast30Days > 0 ? "GROWING" : "STALE";
+
+      // Determine Velocity Trend based on actual measured timestamps
+      const baselineMonthlyVelocity = reviewsLast90Days / 3;
+      if (baselineMonthlyVelocity > 0) {
+        const velocityRatio = reviewsLast30Days / baselineMonthlyVelocity;
+        if (velocityRatio > 1.25) {
+          reviewTrend = "GROWING";
+        } else if (velocityRatio >= 0.75) {
+          reviewTrend = "STABLE";
+        } else if (velocityRatio > 0.2) {
+          reviewTrend = "DECLINING";
+        } else {
+          reviewTrend = "STALE";
+        }
+      } else {
+        reviewTrend = reviewsLast30Days > 0 ? "GROWING" : "STALE";
+      }
     }
 
     return {

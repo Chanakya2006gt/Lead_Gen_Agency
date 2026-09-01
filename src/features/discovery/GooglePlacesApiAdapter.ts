@@ -19,8 +19,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
     const query = `${niche} in ${location}`;
 
     if (!this.apiKey) {
-      console.warn("GOOGLE_MAPS_API_KEY is not configured in environment variables.");
-      return [];
+      throw new Error("GOOGLE_MAPS_API_KEY is not configured in environment variables.");
     }
 
     // Try Google Places API (New) first
@@ -30,17 +29,12 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
         return placesNew;
       }
     } catch (err) {
-      console.warn("Google Places API (New) request failed, falling back to Classic Places API:", err);
+      console.warn("Google Places API (New) request failed, trying Classic Places API:", err);
     }
 
     // Fallback to Google Places API (Classic Text Search)
-    try {
-      const placesClassic = await this.queryPlacesClassic(query, maxResults);
-      return placesClassic;
-    } catch (err) {
-      console.error("Google Places API (Classic) request also failed:", err);
-      return [];
-    }
+    const placesClassic = await this.queryPlacesClassic(query, maxResults);
+    return placesClassic;
   }
 
   /**
@@ -91,7 +85,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       if (!name) continue;
 
       const placeId = p.id || `gplace_${Buffer.from(name).toString("hex").substring(0, 16)}`;
-      const rating = typeof p.rating === "number" ? p.rating : 4.0;
+      const rating = typeof p.rating === "number" ? p.rating : 0;
       const reviewCount = typeof p.userRatingCount === "number" ? p.userRatingCount : 0;
       const websiteUrl = p.websiteUri || null;
       const phone = p.internationalPhoneNumber || p.nationalPhoneNumber || null;
@@ -99,29 +93,13 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       const googleMapsUrl = p.googleMapsUri || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + " " + formattedAddress)}`;
       const category = p.primaryTypeDisplayName?.text || p.types?.[0]?.replace(/_/g, " ") || undefined;
 
-      // Extract review timestamps
+      // Extract ONLY real review timestamps returned by Google
       const reviews: RawReviewTimestamp[] = [];
       if (Array.isArray(p.reviews)) {
         for (const rev of p.reviews) {
           if (rev.publishTime) {
             reviews.push({ publishedAtDate: rev.publishTime });
           }
-        }
-      }
-
-      // If Google reviews array is limited, compute proportional distribution for recency
-      if (reviews.length === 0 && reviewCount > 0) {
-        const now = new Date();
-        const est30d = Math.max(1, Math.min(15, Math.floor(reviewCount * 0.05)));
-        const est90d = Math.max(est30d, Math.min(45, Math.floor(reviewCount * 0.12)));
-
-        for (let r = 0; r < est30d; r++) {
-          const d = new Date(now.getTime() - Math.floor(Math.random() * 25 + 1) * 86400000);
-          reviews.push({ publishedAtDate: d.toISOString() });
-        }
-        for (let r = 0; r < est90d - est30d; r++) {
-          const d = new Date(now.getTime() - Math.floor(Math.random() * 55 + 30) * 86400000);
-          reviews.push({ publishedAtDate: d.toISOString() });
         }
       }
 
@@ -144,7 +122,6 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
 
   /**
    * Google Places API (Classic) Text Search & Place Details
-   * https://maps.googleapis.com/maps/api/place/textsearch/json
    */
   private async queryPlacesClassic(query: string, maxResults: number): Promise<RawBusinessInput[]> {
     const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
@@ -170,7 +147,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       let phone: string | null = null;
       let reviews: RawReviewTimestamp[] = [];
 
-      // Fetch place details for website, phone, and reviews if placeId exists
+      // Fetch place details for website, phone, and real reviews if placeId exists
       if (placeId) {
         try {
           const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=website,formatted_phone_number,international_phone_number,url,reviews&key=${this.apiKey}`;
@@ -194,24 +171,8 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
         }
       }
 
-      const rating = typeof item.rating === "number" ? item.rating : 4.0;
+      const rating = typeof item.rating === "number" ? item.rating : 0;
       const reviewCount = typeof item.user_ratings_total === "number" ? item.user_ratings_total : 0;
-
-      // Fallback review timestamps if details reviews empty
-      if (reviews.length === 0 && reviewCount > 0) {
-        const now = new Date();
-        const est30d = Math.max(1, Math.min(15, Math.floor(reviewCount * 0.05)));
-        const est90d = Math.max(est30d, Math.min(45, Math.floor(reviewCount * 0.12)));
-
-        for (let r = 0; r < est30d; r++) {
-          const d = new Date(now.getTime() - Math.floor(Math.random() * 25 + 1) * 86400000);
-          reviews.push({ publishedAtDate: d.toISOString() });
-        }
-        for (let r = 0; r < est90d - est30d; r++) {
-          const d = new Date(now.getTime() - Math.floor(Math.random() * 55 + 30) * 86400000);
-          reviews.push({ publishedAtDate: d.toISOString() });
-        }
-      }
 
       results.push({
         placeId: placeId || `gplace_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,

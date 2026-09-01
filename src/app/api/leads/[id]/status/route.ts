@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/core/db";
 import { leads, HumanStatus } from "@/core/db/schema";
+import { verifyApiAccess } from "@/core/auth/verifyAccess";
 import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,9 @@ export async function PATCH(
   request: Request,
   props: { params: Promise<{ id: string }> }
 ) {
+  const authError = verifyApiAccess(request);
+  if (authError) return authError;
+
   try {
     const params = await props.params;
     const leadId = params.id;
@@ -42,6 +46,7 @@ export async function PATCH(
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.errors }, { status: 400 });
     }
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("PATCH /api/leads/[id]/status error:", err);
+    return NextResponse.json({ error: "Failed to update triage status" }, { status: 500 });
   }
 }

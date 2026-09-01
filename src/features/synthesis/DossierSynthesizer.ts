@@ -8,6 +8,8 @@ export interface SynthesizerParams {
   rating: number;
   reviewCount: number;
   reviewTrend: ReviewTrend;
+  reviewsLast30Days?: number | null;
+  reviewsLast90Days?: number | null;
   hasWebsite: boolean;
   websiteUrl?: string | null;
   phone?: string | null;
@@ -32,18 +34,23 @@ export class DossierSynthesizer {
       rating: params.rating,
       reviewCount: params.reviewCount,
       reviewTrend: params.reviewTrend,
-      reviewsLast30Days: params.reviewCount > 100 ? 5 : 2,
-      reviewsLast90Days: params.reviewCount > 100 ? 15 : 6,
+      reviewsLast30Days: params.reviewsLast30Days,
+      reviewsLast90Days: params.reviewsLast90Days,
       hasWebsite: params.hasWebsite,
       auditTelemetry: params.auditTelemetry,
       opportunityType,
     });
 
-    // 1. Grounded Deterministic Rules Engine (Guaranteed zero hallucination)
+    // 1. Grounded Deterministic Rules Engine
     const identifiedStrengths = [
       `Established market reputation with ${params.rating}★ rating across ${params.reviewCount} verified Google reviews.`,
-      `Active customer acquisition momentum (review velocity: ${params.reviewTrend}).`,
     ];
+
+    if (params.reviewTrend !== "UNKNOWN") {
+      identifiedStrengths.push(
+        `Measured customer review velocity: ${params.reviewTrend}.`
+      );
+    }
 
     const identifiedBottlenecks: string[] = [];
 
@@ -76,18 +83,18 @@ export class DossierSynthesizer {
     if (opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE") {
       coreAngle = `Automating client scheduling, WhatsApp intake, and internal service management for ${params.name}.`;
       suggestedScope = `Custom automated intake portal, 24/7 calendar booking sync, multi-staff calendar management, and SMS/WhatsApp appointment reminders.`;
-      estimatedValueRange = "$6,500 – $14,000";
+      estimatedValueRange = "$6,500 – $14,000 (Target Scope Benchmark)";
     } else if (opportunityType === "WEBSITE_AUTOMATION") {
       coreAngle = `Upgrading ${params.name}'s mobile conversion speed and adding instant interactive booking.`;
       suggestedScope = `Mobile-first speed optimization (<1.5s LCP), direct click-to-call conversion bar, and embedded scheduling widget.`;
-      estimatedValueRange = "$3,500 – $7,500";
+      estimatedValueRange = "$3,500 – $7,500 (Target Scope Benchmark)";
     } else {
       coreAngle = `Launching a high-converting digital storefront for ${params.name} to capture Google Maps traffic.`;
       suggestedScope = `Complete responsive website build, Google Maps schema integration, mobile call-to-action anchors, and lead capture form.`;
-      estimatedValueRange = "$2,500 – $5,000";
+      estimatedValueRange = "$2,500 – $5,000 (Target Scope Benchmark)";
     }
 
-    const executiveSummary = `${params.name} is a high-reputation ${params.category || "local business"} (${params.rating}★, ${params.reviewCount} reviews) with high customer trust but a substantial ${opportunityType.replace(/_/g, " ")} gap. Resolving these bottlenecks will directly increase captured mobile bookings.`;
+    const executiveSummary = `${params.name} is a high-reputation ${params.category || "local business"} (${params.rating}★, ${params.reviewCount} reviews) with high customer trust but a substantial ${opportunityType.replace(/_/g, " ")} gap. Resolving these bottlenecks directly increases captured mobile bookings.`;
 
     return {
       reputationScore: scores.reputationScore,

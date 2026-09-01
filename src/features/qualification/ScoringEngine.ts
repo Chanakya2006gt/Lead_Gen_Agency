@@ -4,8 +4,8 @@ export interface ScoringInputs {
   rating: number;
   reviewCount: number;
   reviewTrend: ReviewTrend;
-  reviewsLast30Days: number;
-  reviewsLast90Days: number;
+  reviewsLast30Days?: number | null;
+  reviewsLast90Days?: number | null;
   hasWebsite: boolean;
   auditTelemetry?: AuditTelemetry | null;
   opportunityType: OpportunityType;
@@ -78,11 +78,11 @@ export class ScoringEngine {
   public static calculateOpportunityScore(opportunityType: OpportunityType): number {
     switch (opportunityType) {
       case "CUSTOM_OPERATIONAL_SOFTWARE":
-        return 95; // Custom workflows, portals, multi-location ops ($8k-$25k)
+        return 95;
       case "WEBSITE_AUTOMATION":
-        return 85; // Speed + Calendars + CRM sync + AI Booking ($4k-$10k)
+        return 85;
       case "WEBSITE":
-        return 75; // Brand new modern responsive storefront ($2.5k-$6k)
+        return 75;
       default:
         return 50;
     }

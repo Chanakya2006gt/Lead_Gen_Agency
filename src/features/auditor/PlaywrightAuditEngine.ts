@@ -1,6 +1,8 @@
-import { chromium, Browser, Page } from "playwright";
+import { chromium, Browser } from "playwright";
 import { AuditTelemetry, AuditFinding } from "@/core/db/schema";
 import { IAuditEngine } from "./types";
+import dns from "dns/promises";
+import net from "net";
 
 export class PlaywrightAuditEngine implements IAuditEngine {
   private browser: Browser | null = null;
@@ -28,9 +30,9 @@ export class PlaywrightAuditEngine implements IAuditEngine {
   }
 
   /**
-   * SSRF Protection: Validate target URL before fetching
+   * SSRF Protection: Validates URL protocol, hostname, and resolves IP against private/metadata CIDRs.
    */
-  private validateUrlSecurity(targetUrl: string): string {
+  public async validateUrlSecurity(targetUrl: string, allowLocalhostForTesting: boolean = false): Promise<string> {
     let parsed: URL;
     try {
       if (!/^https?:\/\//i.test(targetUrl)) {
@@ -38,27 +40,77 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       }
       parsed = new URL(targetUrl);
     } catch {
-      throw new Error(`Invalid target URL: ${targetUrl}`);
+      throw new Error(`Invalid target URL format: ${targetUrl}`);
+    }
+
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(`Forbidden URL protocol: ${parsed.protocol}`);
     }
 
     const hostname = parsed.hostname.toLowerCase();
 
-    // Block private/cloud metadata ranges except localhost/127.0.0.1 in testing
-    const blockedHosts = [
-      "169.254.169.254", // AWS/GCP metadata
-      "metadata.google.internal",
-      "0.0.0.0",
-    ];
+    // Check string-based cloud metadata names
+    if (
+      hostname === "metadata.google.internal" ||
+      hostname === "metadata.aws.internal" ||
+      hostname.endsWith(".internal")
+    ) {
+      throw new Error(`Forbidden cloud metadata hostname: ${hostname}`);
+    }
 
-    if (blockedHosts.includes(hostname)) {
-      throw new Error(`Forbidden target hostname (SSRF prevention): ${hostname}`);
+    // Resolve DNS to verify IP addresses
+    let addresses: string[] = [];
+    if (net.isIP(hostname)) {
+      addresses = [hostname];
+    } else {
+      try {
+        const resolved = await dns.lookup(hostname, { all: true });
+        addresses = resolved.map((r) => r.address);
+      } catch (dnsErr: any) {
+        throw new Error(`DNS resolution failed for ${hostname}: ${dnsErr.message}`);
+      }
+    }
+
+    for (const ip of addresses) {
+      if (this.isPrivateOrRestrictedIp(ip)) {
+        // Only allow 127.0.0.1 or localhost if explicitly testing locally
+        if (allowLocalhostForTesting && (ip === "127.0.0.1" || ip === "::1" || hostname === "localhost")) {
+          continue;
+        }
+        throw new Error(`Forbidden private or metadata IP target (SSRF prevention): ${ip} for hostname ${hostname}`);
+      }
     }
 
     return parsed.toString();
   }
 
-  public async auditUrl(rawUrl: string): Promise<AuditTelemetry> {
-    const targetUrl = this.validateUrlSecurity(rawUrl);
+  private isPrivateOrRestrictedIp(ip: string): boolean {
+    if (net.isIPv4(ip)) {
+      const parts = ip.split(".").map(Number);
+      if (parts[0] === 0) return true; // 0.0.0.0/8
+      if (parts[0] === 127) return true; // 127.0.0.0/8 Loopback
+      if (parts[0] === 10) return true; // 10.0.0.0/8 Private
+      if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12 Private
+      if (parts[0] === 192 && parts[1] === 168) return true; // 192.168.0.0/16 Private
+      if (parts[0] === 169 && parts[1] === 254) return true; // 169.254.0.0/16 Link-local / AWS / GCP Metadata
+      if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true; // Carrier-grade NAT
+      if (parts[0] >= 224) return true; // Multicast & reserved
+      return false;
+    }
+
+    if (net.isIPv6(ip)) {
+      const normalized = ip.toLowerCase();
+      if (normalized === "::1" || normalized === "::") return true;
+      if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // Unique local
+      if (normalized.startsWith("fe80")) return true; // Link-local
+      return false;
+    }
+
+    return true;
+  }
+
+  public async auditUrl(rawUrl: string, allowLocalhostForTesting: boolean = false): Promise<AuditTelemetry> {
+    const targetUrl = await this.validateUrlSecurity(rawUrl, allowLocalhostForTesting);
     const browser = await this.getBrowser();
 
     const findings: AuditFinding[] = [];
@@ -101,10 +153,9 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     try {
       await mobilePage.goto(targetUrl, {
         waitUntil: "domcontentloaded",
-        timeout: 15000,
+        timeout: 4000,
       });
-      // Allow DOM to settle for 500ms
-      await mobilePage.waitForTimeout(500);
+      await mobilePage.waitForTimeout(300);
       initialLoadLatencyMs = Date.now() - startTime;
     } catch (err: any) {
       initialLoadLatencyMs = Date.now() - startTime;
@@ -117,7 +168,6 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       });
     }
 
-    // Safe Evaluate Helper
     const safeEvaluate = async <T>(fn: () => T, fallback: T): Promise<T> => {
       try {
         return await mobilePage.evaluate(fn);
@@ -174,7 +224,6 @@ export class PlaywrightAuditEngine implements IAuditEngine {
         forms.length > 0 ||
         document.querySelectorAll('input[type="date"], input[type="time"], select, iframe[src*="calendly"], iframe[src*="acuity"]').length > 0;
 
-      // Sample first 15 internal/external links to verify anchor integrity
       const sampleLinks = links
         .map((a) => a.getAttribute("href"))
         .filter((h): h is string => Boolean(h && !h.startsWith("#") && !h.startsWith("javascript:")));
@@ -210,27 +259,28 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       });
     }
 
-    // Check Broken Links Sample
+    // Check Broken Links Sample with SSRF validation on every target link
     for (const href of conversionSignals.sampleLinks) {
       if (!href) continue;
       try {
         const resolvedUrl = new URL(href, targetUrl).toString();
-        if (resolvedUrl.startsWith("http")) {
-          const res = await mobileContext.request.head(resolvedUrl, { timeout: 3000 }).catch(() => null);
-          if (res && res.status() >= 400) {
-            brokenLinksCount++;
-            findings.push({
-              category: "technical",
-              finding: `Broken Internal/External Link (HTTP ${res.status()})`,
-              evidence: `Link returned HTTP error status ${res.status()}`,
-              selectorOrUrl: href,
-              confidence: 0.9,
-            });
-            break; // Record sample and avoid slow audit
-          }
+        // Validate target link before making HEAD request (prevent 2nd SSRF hop)
+        await this.validateUrlSecurity(resolvedUrl, allowLocalhostForTesting);
+
+        const res = await mobileContext.request.head(resolvedUrl, { timeout: 3000 }).catch(() => null);
+        if (res && res.status() >= 400) {
+          brokenLinksCount++;
+          findings.push({
+            category: "technical",
+            finding: `Broken Link (HTTP ${res.status()})`,
+            evidence: `Link returned HTTP error status ${res.status()}`,
+            selectorOrUrl: href,
+            confidence: 0.9,
+          });
+          break;
         }
       } catch {
-        // Skip unresolvable URLs
+        // Skip unresolvable or blocked private IP links
       }
     }
 

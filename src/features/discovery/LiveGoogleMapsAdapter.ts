@@ -83,7 +83,6 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
       // Extract listing items from DOM
       const rawPlaces = await page.evaluate((max) => {
         const items: any[] = [];
-        // Match standard modern Google Maps place card containers
         const cards = Array.from(document.querySelectorAll('div.Nv2PK, div[role="article"]'));
 
         if (cards.length > 0) {
@@ -99,18 +98,18 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
             const href = linkEl?.href || "";
             const text = card.textContent || "";
 
-            // Rating Extraction (e.g. 4.8)
+            // Rating Extraction (Must be parsed accurately, NO fake defaults)
             const ratingEl = card.querySelector('.MW4etd, [aria-label*="stars"], [aria-label*="star"]');
             const ratingMatch = (ratingEl?.textContent || text).match(/([1-5]\.\d)/);
-            const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 4.5;
+            if (!ratingMatch) continue; // Skip if unparseable
+            const rating = parseFloat(ratingMatch[1]);
 
-            // Review Count Extraction (e.g. "(342)" or "342 reviews")
+            // Review Count Extraction (Must be parsed accurately, NO fake defaults)
             const reviewEl = card.querySelector('.UY7F9, [aria-label*="reviews"]');
             const reviewText = reviewEl?.textContent || text;
             const reviewCountMatch = reviewText.match(/\(([\d,]+)\)/) || reviewText.match(/([\d,]+)\s+reviews/i);
-            const reviewCount = reviewCountMatch
-              ? parseInt(reviewCountMatch[1].replace(/,/g, ""), 10)
-              : 85;
+            if (!reviewCountMatch) continue; // Skip if unparseable
+            const reviewCount = parseInt(reviewCountMatch[1].replace(/,/g, ""), 10);
 
             // Website Button
             const websiteBtn = card.querySelector('a[data-value="Website"], a.lcr4fd, a[aria-label*="website" i]');
@@ -134,46 +133,12 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
               address,
             });
           }
-        } else {
-          // Fallback anchor scan
-          const links = Array.from(document.querySelectorAll('a[href*="/maps/place/"]'));
-          for (const a of links) {
-            if (items.length >= max) break;
-            const href = (a as HTMLAnchorElement).href;
-            const name = a.getAttribute("aria-label") || a.textContent?.trim() || "";
-            if (!name || items.some((p) => p.name === name)) continue;
-
-            items.push({
-              name,
-              href,
-              rating: 4.6,
-              reviewCount: 95,
-              websiteUrl: null,
-              phone: null,
-              address: "",
-            });
-          }
         }
 
         return items;
       }, maxResults);
 
-      const now = new Date();
-
       for (const item of rawPlaces) {
-        const reviews: RawReviewTimestamp[] = [];
-        const reviewsLast30d = Math.max(1, Math.min(18, Math.floor(item.reviewCount * 0.06)));
-        const reviewsLast90d = Math.max(reviewsLast30d, Math.min(48, Math.floor(item.reviewCount * 0.14)));
-
-        for (let r = 0; r < reviewsLast30d; r++) {
-          const d = new Date(now.getTime() - Math.floor(Math.random() * 25 + 1) * 86400000);
-          reviews.push({ publishedAtDate: d.toISOString() });
-        }
-        for (let r = 0; r < reviewsLast90d - reviewsLast30d; r++) {
-          const d = new Date(now.getTime() - Math.floor(Math.random() * 55 + 30) * 86400000);
-          reviews.push({ publishedAtDate: d.toISOString() });
-        }
-
         const placeId = `gmaps_${Buffer.from(item.name).toString("hex").substring(0, 16)}_${Date.now().toString(36)}`;
 
         results.push({
@@ -186,7 +151,7 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
           phone: item.phone,
           formattedAddress: item.address || location,
           googleMapsUrl: item.href,
-          reviews,
+          reviews: [], // Honest: Live Maps summary does not provide granular review timestamps
         });
       }
     } catch (err) {

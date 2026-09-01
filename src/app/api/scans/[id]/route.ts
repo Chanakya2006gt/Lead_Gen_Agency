@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/core/db";
 import { discoveryScans, leads } from "@/core/db/schema";
+import { verifyApiAccess } from "@/core/auth/verifyAccess";
 import { eq, desc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +10,9 @@ export async function GET(
   request: Request,
   props: { params: Promise<{ id: string }> }
 ) {
+  const authError = verifyApiAccess(request);
+  if (authError) return authError;
+
   try {
     const params = await props.params;
     const scanId = params.id;
@@ -35,6 +39,7 @@ export async function GET(
       leads: qualifiedLeads,
     });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("GET /api/scans/[id] error:", err);
+    return NextResponse.json({ error: "Failed to retrieve scan details" }, { status: 500 });
   }
 }

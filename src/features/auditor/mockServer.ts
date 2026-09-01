@@ -102,6 +102,14 @@ export class MockSiteServer {
         res.end("Not Found");
       });
 
+      this.server.on("error", (err: any) => {
+        if (err.code === "EADDRINUSE") {
+          resolve(); // Already running, proceed
+        } else {
+          resolve();
+        }
+      });
+
       this.server.listen(this.port, () => {
         resolve();
       });

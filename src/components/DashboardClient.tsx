@@ -25,14 +25,17 @@ export function DashboardClient() {
       if (res.ok) {
         const data = await res.json();
         setScans(data.scans || []);
-        if (!activeScanId && data.scans?.length > 0) {
-          setActiveScanId(data.scans[0].id);
-        }
+        setActiveScanId((current) => {
+          if (!current && data.scans?.length > 0) {
+            return data.scans[0].id;
+          }
+          return current;
+        });
       }
     } catch (err) {
       console.error("Error fetching scans:", err);
     }
-  }, [activeScanId]);
+  }, []);
 
   // Fetch leads for active scan
   const fetchScanDetails = useCallback(async (scanId: string) => {
@@ -123,11 +126,10 @@ export function DashboardClient() {
         {/* Discovery Launchpad */}
         <ScanLauncher onScanLaunched={handleScanLaunched} isLoading={isScanning} />
 
-        {/* Live Playwright Telemetry Drawer */}
+        {/* Live Pipeline Telemetry Drawer */}
         <LiveTerminal
           isScanning={isScanning}
-          niche={activeScan?.niche}
-          location={activeScan?.locationInput}
+          activeScan={activeScan}
         />
 
         {/* Scan Selector Tabs Bar */}

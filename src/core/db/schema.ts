@@ -1,4 +1,3 @@
-import { pgTable, text, varchar, integer, boolean, numeric, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { sqliteTable, text as sqliteText, integer as sqliteInteger, real as sqliteReal } from "drizzle-orm/sqlite-core";
 
 export type ReviewTrend = "GROWING" | "STABLE" | "DECLINING" | "STALE" | "UNKNOWN";
@@ -45,7 +44,7 @@ export interface BusinessDossier {
 }
 
 // =========================================================================
-// SQLite Schema (Local Zero-Config Mode)
+// SQLite Schema (Local Dedicated Workstation Engine)
 // =========================================================================
 
 export const discoveryScans = sqliteTable("discovery_scans", {
@@ -62,7 +61,7 @@ export const discoveryScans = sqliteTable("discovery_scans", {
 export const leads = sqliteTable("leads", {
   id: sqliteText("id").primaryKey(),
   scanId: sqliteText("scan_id").references(() => discoveryScans.id, { onDelete: "cascade" }),
-  placeId: sqliteText("place_id").notNull().unique(),
+  placeId: sqliteText("place_id").notNull(),
   name: sqliteText("name").notNull(),
   category: sqliteText("category"),
   formattedAddress: sqliteText("formatted_address"),
@@ -72,9 +71,9 @@ export const leads = sqliteTable("leads", {
   rating: sqliteReal("rating").notNull(),
   reviewCount: sqliteInteger("review_count").notNull(),
   lastReviewDate: sqliteText("last_review_date"),
-  reviewsLast30Days: sqliteInteger("reviews_last_30_days").default(0),
-  reviewsLast90Days: sqliteInteger("reviews_last_90_days").default(0),
-  reviewsLast180Days: sqliteInteger("reviews_last_180_days").default(0),
+  reviewsLast30Days: sqliteInteger("reviews_last_30_days"),
+  reviewsLast90Days: sqliteInteger("reviews_last_90_days"),
+  reviewsLast180Days: sqliteInteger("reviews_last_180_days"),
   reviewTrend: sqliteText("review_trend").$type<ReviewTrend>().notNull().default("UNKNOWN"),
   hasWebsite: sqliteInteger("has_website", { mode: "boolean" }).notNull().default(false),
   auditStatus: sqliteText("audit_status").notNull().default("PENDING"),

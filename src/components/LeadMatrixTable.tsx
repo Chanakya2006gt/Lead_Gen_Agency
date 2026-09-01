@@ -284,9 +284,9 @@ export function LeadMatrixTable({
                         <div className="flex flex-col gap-1.5">
                           <div>{renderVelocityBadge(lead.reviewTrend)}</div>
                           <div className="text-[10px] text-slate-400 font-mono flex items-center gap-2">
-                            <span>30d: <strong className="text-slate-200">{lead.reviewsLast30Days ?? 0}</strong></span>
+                            <span>30d: <strong className="text-slate-200">{lead.reviewsLast30Days !== null ? lead.reviewsLast30Days : "—"}</strong></span>
                             <span className="text-slate-600">|</span>
-                            <span>90d: <strong className="text-slate-200">{lead.reviewsLast90Days ?? 0}</strong></span>
+                            <span>90d: <strong className="text-slate-200">{lead.reviewsLast90Days !== null ? lead.reviewsLast90Days : "—"}</strong></span>
                           </div>
                         </div>
                       </td>

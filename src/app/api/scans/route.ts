@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/core/db";
 import { discoveryScans, leads } from "@/core/db/schema";
 import { ScanPipelineService } from "@/features/pipeline/ScanPipelineService";
+import { verifyApiAccess } from "@/core/auth/verifyAccess";
 import { desc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -11,10 +12,13 @@ const createScanSchema = z.object({
   niche: z.string().min(2, "Niche must be at least 2 characters"),
   location: z.string().min(2, "Location must be at least 2 characters"),
   radiusKm: z.number().int().min(1).max(100).default(15),
-  source: z.enum(["google_places", "live_google_maps", "serpapi", "mock", "apify", "outscraper"]).default("live_google_maps"),
+  source: z.enum(["google_places", "live_google_maps", "serpapi", "mock", "apify", "outscraper"]).default("google_places"),
 });
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authError = verifyApiAccess(request);
+  if (authError) return authError;
+
   try {
     const scans = db
       .select()
@@ -24,11 +28,15 @@ export async function GET() {
 
     return NextResponse.json({ scans });
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("GET /api/scans error:", err);
+    return NextResponse.json({ error: "Failed to retrieve discovery scans" }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  const authError = verifyApiAccess(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const validated = createScanSchema.parse(body);
@@ -51,6 +59,7 @@ export async function POST(request: Request) {
     if (err instanceof z.ZodError) {
       return NextResponse.json({ error: err.errors }, { status: 400 });
     }
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("POST /api/scans error:", err);
+    return NextResponse.json({ error: "Failed to initialize discovery scan" }, { status: 500 });
   }
 }

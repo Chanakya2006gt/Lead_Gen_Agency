@@ -1,65 +1,62 @@
+import { RawBusinessInput } from "@/features/qualification/UniversalFilterService";
 import { IDiscoveryAdapter, DiscoveryParams } from "./types";
-import { RawBusinessInput, RawReviewTimestamp } from "@/features/qualification/UniversalFilterService";
 
 export class SerpApiGoogleMapsAdapter implements IDiscoveryAdapter {
   public readonly name = "SerpApiGoogleMapsAdapter";
-  private readonly apiKey: string;
+  private apiKey: string | null;
 
   constructor(apiKey?: string) {
-    this.apiKey = apiKey || process.env.SERPAPI_API_KEY || "";
+    this.apiKey = apiKey || process.env.SERPAPI_API_KEY || null;
   }
 
   public async discover(params: DiscoveryParams): Promise<RawBusinessInput[]> {
-    if (!this.apiKey) {
-      throw new Error("SerpAPI API key is not configured in environment (SERPAPI_API_KEY).");
-    }
-
-    const { niche, location, maxResults = 20 } = params;
+    const { niche, location, maxResults = 15 } = params;
     const query = `${niche} in ${location}`;
 
-    const url = `https://serpapi.com/search.json?engine=google_maps&q=${encodeURIComponent(
-      query
-    )}&hl=en&gl=us&api_key=${this.apiKey}`;
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`SerpAPI request failed (${response.status}): ${errorText}`);
+    if (!this.apiKey) {
+      throw new Error("SERPAPI_API_KEY is not configured in environment variables.");
     }
 
-    const data = await response.json();
-    const localResults: any[] = data.local_results || [];
-    const now = new Date();
+    const searchUrl = `https://serpapi.com/search.json?engine=google_maps&q=${encodeURIComponent(
+      query
+    )}&api_key=${this.apiKey}`;
 
-    return localResults.slice(0, maxResults).map((item) => {
-      const rating = Number(item.rating || 0);
-      const reviewCount = Number(item.reviews || 0);
+    const res = await fetch(searchUrl);
+    if (!res.ok) {
+      throw new Error(`SerpApi HTTP ${res.status}: ${await res.text()}`);
+    }
 
-      const reviews: RawReviewTimestamp[] = [];
-      const reviewsLast30d = Math.max(1, Math.min(15, Math.floor(reviewCount * 0.05)));
-      const reviewsLast90d = Math.max(reviewsLast30d, Math.min(45, Math.floor(reviewCount * 0.12)));
+    const data = await res.json();
+    const rawPlaces = (data.local_results || []).slice(0, maxResults);
+    const results: RawBusinessInput[] = [];
 
-      for (let r = 0; r < reviewsLast30d; r++) {
-        const d = new Date(now.getTime() - Math.floor(Math.random() * 25 + 1) * 86400000);
-        reviews.push({ publishedAtDate: d.toISOString() });
-      }
-      for (let r = 0; r < reviewsLast90d - reviewsLast30d; r++) {
-        const d = new Date(now.getTime() - Math.floor(Math.random() * 55 + 30) * 86400000);
-        reviews.push({ publishedAtDate: d.toISOString() });
-      }
+    for (const item of rawPlaces) {
+      const name = item.title || "";
+      if (!name) continue;
 
-      return {
-        placeId: item.place_id || item.data_id || `serp_${Math.random().toString(36).substring(2, 9)}`,
-        name: item.title || item.name || "Unknown Business",
-        category: item.type || item.category || niche,
+      const placeId = item.place_id || `serp_${Buffer.from(name).toString("hex").substring(0, 16)}`;
+      const rating = typeof item.rating === "number" ? item.rating : 0;
+      const reviewCount = typeof item.reviews === "number" ? item.reviews : 0;
+      const websiteUrl = item.website || item.links?.website || null;
+      const phone = item.phone || null;
+      const formattedAddress = item.address || "";
+      const googleMapsUrl = item.link || null;
+      const category = item.type || item.category || undefined;
+
+      results.push({
+        placeId,
+        name,
+        category,
         rating,
         reviewCount,
-        websiteUrl: item.website || null,
-        phone: item.phone || null,
-        formattedAddress: item.address || location,
-        googleMapsUrl: item.link || null,
-        reviews,
-      };
-    });
+        websiteUrl,
+        phone,
+        formattedAddress,
+        googleMapsUrl,
+        reviews: [], // SerpAPI map local_results does not include full review timestamps
+      });
+    }
+
+    return results;
   }
 }

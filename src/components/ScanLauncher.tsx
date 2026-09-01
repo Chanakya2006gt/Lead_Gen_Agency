@@ -32,14 +32,16 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
   >("google_places");
 
   // Autocomplete state
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Debounced Place Autocomplete Query
   useEffect(() => {
-    if (!location.trim() || location.length < 2) {
+    if (!isFocused || !location.trim() || location.length < 2) {
       setPredictions([]);
       setShowDropdown(false);
       return;
@@ -52,7 +54,7 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
         if (res.ok) {
           const data = await res.json();
           setPredictions(data.predictions || []);
-          if (data.predictions?.length > 0) {
+          if (isFocused && data.predictions?.length > 0) {
             setShowDropdown(true);
           }
         }
@@ -64,7 +66,7 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [location]);
+  }, [location, isFocused]);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -88,6 +90,7 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
     setShowDropdown(false);
 
     try {
+      setErrorMessage(null);
       const res = await fetch("/api/scans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -107,7 +110,7 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
       const data = await res.json();
       onScanLaunched(data.scanId);
     } catch (err: any) {
-      alert(`Scan Launch Error: ${err.message}`);
+      setErrorMessage(err.message);
     }
   };
 
@@ -153,7 +156,19 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-3.5 relative">
+        {errorMessage && (
+          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono flex items-center justify-between">
+            <span>{errorMessage}</span>
+            <button
+              onClick={() => setErrorMessage(null)}
+              className="text-slate-400 hover:text-white text-xs px-2 py-0.5"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        <form id="scan-launcher-form" onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-3.5 relative">
           {/* Niche Input */}
           <div className="md:col-span-4">
             <label className="block text-[10px] font-mono uppercase text-slate-400 font-bold mb-1.5">
@@ -183,8 +198,10 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
                 value={location}
                 onChange={(e) => {
                   setLocation(e.target.value);
+                  setIsFocused(true);
                 }}
                 onFocus={() => {
+                  setIsFocused(true);
                   if (predictions.length > 0) setShowDropdown(true);
                 }}
                 placeholder="Type any city (e.g. Warangal, Dallas, London)"
@@ -271,7 +288,9 @@ export function ScanLauncher({ onScanLaunched, isLoading }: ScanLauncherProps) {
           {/* Button-in-Button Launch CTA */}
           <div className="md:col-span-2 flex items-end">
             <button
-              type="submit"
+              type="button"
+              data-testid="btn-launch-discovery"
+              onClick={handleSubmit}
               disabled={isLoading}
               className="group w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold tracking-wide flex items-center justify-between shadow-[0_0_25px_rgba(99,102,241,0.35)] transition-all duration-300 active:scale-[0.98] cursor-pointer"
             >

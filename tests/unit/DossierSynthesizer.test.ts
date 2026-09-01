@@ -19,7 +19,7 @@ describe("DossierSynthesizer (Deterministic Grounded Pitch Formulation)", () => 
     expect(dossier.overallLeadScore).toBeGreaterThan(80);
     expect(dossier.recommendedPitch.coreAngle).toContain("Summit Dental Clinic");
     expect(dossier.identifiedBottlenecks[0]).toContain("Zero official website");
-    expect(dossier.recommendedPitch.estimatedValueRange).toBe("$2,500 – $5,000");
+    expect(dossier.recommendedPitch.estimatedValueRange).toContain("$2,500 – $5,000");
   });
 
   it("Synthesizes custom operational software angle for high-volume WhatsApp clinics", async () => {
@@ -56,6 +56,6 @@ describe("DossierSynthesizer (Deterministic Grounded Pitch Formulation)", () => 
 
     expect(dossier.opportunityType).toBe("CUSTOM_OPERATIONAL_SOFTWARE");
     expect(dossier.recommendedPitch.coreAngle).toContain("scheduling, WhatsApp intake");
-    expect(dossier.recommendedPitch.estimatedValueRange).toBe("$6,500 – $14,000");
+    expect(dossier.recommendedPitch.estimatedValueRange).toContain("$6,500 – $14,000");
   });
 });

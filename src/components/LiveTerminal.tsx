@@ -1,47 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Terminal, ChevronDown, ChevronUp, Radio, CheckCircle2, Loader2, Sparkles } from "lucide-react";
+import React, { useState } from "react";
+import { Terminal, ChevronDown, ChevronUp, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { DiscoveryScan } from "@/core/db/schema";
 
 interface LiveTerminalProps {
   isScanning: boolean;
-  niche?: string;
-  location?: string;
+  activeScan?: DiscoveryScan | null;
 }
 
-export function LiveTerminal({ isScanning, niche = "Dental Clinics", location = "Warangal" }: LiveTerminalProps) {
+export function LiveTerminal({ isScanning, activeScan }: LiveTerminalProps) {
   const [isOpen, setIsOpen] = useState(true);
-  const [logs, setLogs] = useState<Array<{ timestamp: string; text: string; type: "info" | "success" | "warn" | "exec" }>>([]);
-
-  useEffect(() => {
-    if (!isScanning) {
-      if (logs.length === 0) {
-        setLogs([
-          { timestamp: "00:00.00", text: "Ready. Select a target niche & market to initiate real-time headless discovery.", type: "info" },
-        ]);
-      }
-      return;
-    }
-
-    setLogs([]);
-    const startTime = Date.now();
-
-    const addLog = (text: string, type: "info" | "success" | "warn" | "exec", delayMs: number) => {
-      setTimeout(() => {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
-        setLogs((prev) => [...prev, { timestamp: `+${elapsed}s`, text, type }]);
-      }, delayMs);
-    };
-
-    addLog(`Initializing Headless Chromium instance (Dual-Viewport: 1280x900 / 375x812)...`, "exec", 200);
-    addLog(`Navigating to Google Maps Search: "${niche} in ${location}"`, "info", 800);
-    addLog(`Parsing feed container [role="feed"] -> Scrolling DOM to extract candidate listings...`, "info", 1800);
-    addLog(`Extracted raw business profiles (ratings, review counts, addresses, phone numbers, websites).`, "success", 3000);
-    addLog(`Enforcing 13 Universal Mathematical Invariants (rating >= 4.0★, reviews >= 50)...`, "exec", 4000);
-    addLog(`Executing mobile DOM audit (<meta name="viewport">, layout overflow, SSL, CTAs)...`, "info", 5200);
-    addLog(`Computing 4D mathematical scores (S_rep, S_gap, S_opp, S_conf) & synthesizing pitch deck.`, "success", 6800);
-    addLog(`Discovery & audit completed. Leads persisted to database.`, "success", 8200);
-  }, [isScanning, niche, location]);
 
   return (
     <div className="bg-[#070A0F] border border-white/[0.08] rounded-2xl overflow-hidden shadow-2xl transition-all">
@@ -58,15 +27,25 @@ export function LiveTerminal({ isScanning, niche = "Dental Clinics", location = 
           </div>
           <span className="text-[11px] font-mono font-bold text-slate-300 flex items-center gap-1.5 ml-2">
             <Terminal className="w-3.5 h-3.5 text-indigo-400" />
-            <span>PLAYWRIGHT RUNTIME TELEMETRY</span>
+            <span>PIPELINE EXECUTION TELEMETRY</span>
           </span>
 
-          {isScanning && (
+          {isScanning ? (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30 animate-pulse">
               <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
-              <span>LIVE SCRAPING ACTIVE</span>
+              <span>ACTIVE SCAN RUNNING</span>
             </span>
-          )}
+          ) : activeScan?.status === "COMPLETED" ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+              <span>SCAN COMPLETED</span>
+            </span>
+          ) : activeScan?.status === "FAILED" ? (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30">
+              <AlertCircle className="w-3 h-3 text-rose-400" />
+              <span>SCAN FAILED</span>
+            </span>
+          ) : null}
         </div>
 
         <button className="text-slate-400 hover:text-white p-1">
@@ -76,31 +55,47 @@ export function LiveTerminal({ isScanning, niche = "Dental Clinics", location = 
 
       {/* Terminal Output */}
       {isOpen && (
-        <div className="p-4 font-mono text-[11px] space-y-1.5 max-h-48 overflow-y-auto bg-[#05070B] text-slate-300">
-          {logs.map((log, idx) => (
-            <div key={idx} className="flex items-start gap-2.5">
-              <span className="text-slate-600 select-none font-bold shrink-0">{log.timestamp}</span>
-              <span className="shrink-0">
-                {log.type === "success" && <span className="text-emerald-400 font-bold">✔</span>}
-                {log.type === "exec" && <span className="text-indigo-400 font-bold">❯</span>}
-                {log.type === "info" && <span className="text-sky-400 font-bold">ℹ</span>}
-                {log.type === "warn" && <span className="text-amber-400 font-bold">⚠</span>}
-              </span>
-              <span
-                className={
-                  log.type === "success"
-                    ? "text-emerald-300"
-                    : log.type === "exec"
-                    ? "text-indigo-200"
-                    : log.type === "warn"
-                    ? "text-amber-300"
-                    : "text-slate-300"
-                }
-              >
-                {log.text}
-              </span>
+        <div className="p-4 font-mono text-[11px] space-y-2 bg-[#05070B] text-slate-300 max-h-48 overflow-y-auto">
+          {activeScan ? (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">SCAN ID:</span>
+                <span className="text-indigo-300">{activeScan.id}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">TARGET:</span>
+                <span className="text-slate-200">
+                  {activeScan.niche} in {activeScan.locationInput} (Radius: {activeScan.radiusKm} km)
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">RAW INGESTED:</span>
+                <span className="text-amber-300">{activeScan.rawDiscoveredCount} businesses</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">QUALIFIED (Rating &ge; 4.0★ &amp; Rev &ge; 50):</span>
+                <span className="text-emerald-300 font-bold">{activeScan.qualifiedCount} leads</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-bold">STATUS:</span>
+                <span
+                  className={
+                    activeScan.status === "COMPLETED"
+                      ? "text-emerald-400 font-bold"
+                      : activeScan.status === "RUNNING"
+                      ? "text-amber-400 font-bold animate-pulse"
+                      : "text-rose-400 font-bold"
+                  }
+                >
+                  {activeScan.status}
+                </span>
+              </div>
             </div>
-          ))}
+          ) : (
+            <div className="text-slate-500">
+              Ready. Select a target vertical and location to execute a live qualification scan.
+            </div>
+          )}
         </div>
       )}
     </div>
