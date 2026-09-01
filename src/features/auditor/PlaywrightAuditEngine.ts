@@ -103,6 +103,8 @@ export class PlaywrightAuditEngine implements IAuditEngine {
         waitUntil: "domcontentloaded",
         timeout: 15000,
       });
+      // Allow DOM to settle for 500ms
+      await mobilePage.waitForTimeout(500);
       initialLoadLatencyMs = Date.now() - startTime;
     } catch (err: any) {
       initialLoadLatencyMs = Date.now() - startTime;
@@ -115,11 +117,20 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       });
     }
 
+    // Safe Evaluate Helper
+    const safeEvaluate = async <T>(fn: () => T, fallback: T): Promise<T> => {
+      try {
+        return await mobilePage.evaluate(fn);
+      } catch {
+        return fallback;
+      }
+    };
+
     // Inspect Viewport Meta
-    const viewportMetaPresent = await mobilePage.evaluate(() => {
+    const viewportMetaPresent = await safeEvaluate(() => {
       const meta = document.querySelector('meta[name="viewport"]');
       return meta !== null;
-    });
+    }, false);
 
     if (!viewportMetaPresent) {
       findings.push({
@@ -132,11 +143,11 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     }
 
     // Inspect Horizontal Layout Overflow on Mobile
-    const hasHorizontalOverflow = await mobilePage.evaluate(() => {
+    const hasHorizontalOverflow = await safeEvaluate(() => {
       const docWidth = document.documentElement.offsetWidth;
       const scrollWidth = document.documentElement.scrollWidth;
       return scrollWidth > docWidth + 5;
-    });
+    }, false);
 
     if (hasHorizontalOverflow) {
       findings.push({
@@ -149,13 +160,13 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     }
 
     // Inspect Conversion Anchors (Direct Call, WhatsApp, Forms)
-    const conversionSignals = await mobilePage.evaluate(() => {
+    const conversionSignals = await safeEvaluate(() => {
       const links = Array.from(document.querySelectorAll("a"));
-      const hasDirectClickToCall = links.some((a) => a.href.toLowerCase().startsWith("tel:"));
+      const hasDirectClickToCall = links.some((a) => (a.href || "").toLowerCase().startsWith("tel:"));
       const hasWhatsAppDirectLink = links.some(
         (a) =>
-          a.href.toLowerCase().includes("wa.me") ||
-          a.href.toLowerCase().includes("api.whatsapp.com")
+          (a.href || "").toLowerCase().includes("wa.me") ||
+          (a.href || "").toLowerCase().includes("api.whatsapp.com")
       );
 
       const forms = Array.from(document.querySelectorAll("form"));
@@ -163,10 +174,10 @@ export class PlaywrightAuditEngine implements IAuditEngine {
         forms.length > 0 ||
         document.querySelectorAll('input[type="date"], input[type="time"], select, iframe[src*="calendly"], iframe[src*="acuity"]').length > 0;
 
-      // Sample first 10 internal/external links to verify anchor integrity
+      // Sample first 15 internal/external links to verify anchor integrity
       const sampleLinks = links
         .map((a) => a.getAttribute("href"))
-        .filter((h) => h && !h.startsWith("#") && !h.startsWith("javascript:"));
+        .filter((h): h is string => Boolean(h && !h.startsWith("#") && !h.startsWith("javascript:")));
 
       return {
         hasDirectClickToCall,
@@ -174,6 +185,11 @@ export class PlaywrightAuditEngine implements IAuditEngine {
         hasInteractiveBookingForm,
         sampleLinks: sampleLinks.slice(0, 15),
       };
+    }, {
+      hasDirectClickToCall: false,
+      hasWhatsAppDirectLink: false,
+      hasInteractiveBookingForm: false,
+      sampleLinks: [] as string[],
     });
 
     if (!conversionSignals.hasDirectClickToCall) {
