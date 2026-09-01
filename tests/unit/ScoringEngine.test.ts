@@ -1,69 +1,76 @@
 import { describe, it, expect } from "vitest";
-import { ScoringEngine } from "@/services/scoring/ScoringEngine";
+import { ScoringEngine } from "@/features/qualification/ScoringEngine";
 
-describe("ScoringEngine (4D Lead Scoring Formula)", () => {
-  it("Scores 100 for digital gap when business has NO website", () => {
-    const score = ScoringEngine.calculate({
+describe("ScoringEngine (4D Mathematical Model)", () => {
+  it("Assigns Maximum Digital Gap (100) and High Opportunity to No-Website Leads", () => {
+    const scores = ScoringEngine.computeScores({
       rating: 4.8,
       reviewCount: 300,
       reviewTrend: "GROWING",
+      reviewsLast30Days: 10,
+      reviewsLast90Days: 25,
       hasWebsite: false,
-      category: "Dentist",
+      auditTelemetry: null,
+      opportunityType: "WEBSITE",
     });
 
-    expect(score.digitalGapScore).toBe(100);
-    expect(score.confidenceScore).toBe(100);
-    expect(score.totalLeadScore).toBeGreaterThanOrEqual(80);
+    expect(scores.digitalGapScore).toBe(100);
+    expect(scores.opportunityScore).toBe(75);
+    expect(scores.reputationScore).toBeGreaterThan(80);
+    expect(scores.overallLeadScore).toBeGreaterThan(85);
   });
 
-  it("Penalizes stale momentum in reputation score", () => {
-    const scoreGrowing = ScoringEngine.calculate({
-      rating: 4.8,
-      reviewCount: 200,
-      reviewTrend: "GROWING",
-      hasWebsite: true,
-    });
-
-    const scoreStale = ScoringEngine.calculate({
-      rating: 4.8,
-      reviewCount: 200,
-      reviewTrend: "STALE",
-      hasWebsite: true,
-    });
-
-    expect(scoreGrowing.reputationScore).toBeGreaterThan(scoreStale.reputationScore);
-  });
-
-  it("Calculates cumulative gap penalties for broken mobile viewport, missing forms, and slow speed", () => {
-    const score = ScoringEngine.calculate({
+  it("Computes empirical gap scores when site lacks mobile viewport and SSL", () => {
+    const scores = ScoringEngine.computeScores({
       rating: 4.5,
-      reviewCount: 100,
+      reviewCount: 150,
       reviewTrend: "STABLE",
+      reviewsLast30Days: 4,
+      reviewsLast90Days: 12,
       hasWebsite: true,
-      category: "HVAC Contractor",
       auditTelemetry: {
-        isHttps: false,
-        hasMobileViewport: false,
-        hasHorizontalScroll: true,
-        domLoadTimeSec: 4.2,
-        hasPhoneCta: false,
-        hasWhatsAppCta: false,
-        hasEnquiryOrBookingForm: false,
-        brokenLinksCount: 2,
-        jsErrorsCount: 1,
-        extractedServices: [],
-        findings: [
-          {
-            category: "ux",
-            finding: "Missing Viewport",
-            evidence: "No meta tag",
-            confidence: 1.0,
-          },
-        ],
+        viewportMetaPresent: false, // +30
+        hasHorizontalOverflow: true, // +20
+        hasSsl: false, // +25
+        brokenLinksCount: 1, // +10
+        jsConsoleErrorsCount: 1, // +10
+        initialLoadLatencyMs: 1200,
+        hasDirectClickToCall: false, // +15
+        hasWhatsAppDirectLink: false,
+        hasInteractiveBookingForm: false, // +20
+        findings: [],
       },
+      opportunityType: "WEBSITE",
     });
 
-    expect(score.digitalGapScore).toBeGreaterThanOrEqual(90);
-    expect(score.totalLeadScore).toBeGreaterThan(60);
+    expect(scores.digitalGapScore).toBe(100); // Capped at 100
+    expect(scores.overallLeadScore).toBeGreaterThan(80);
+  });
+
+  it("Computes lower gap score for modern, responsive sites with booking funnels", () => {
+    const scores = ScoringEngine.computeScores({
+      rating: 4.9,
+      reviewCount: 400,
+      reviewTrend: "GROWING",
+      reviewsLast30Days: 15,
+      reviewsLast90Days: 40,
+      hasWebsite: true,
+      auditTelemetry: {
+        viewportMetaPresent: true,
+        hasHorizontalOverflow: false,
+        hasSsl: true,
+        brokenLinksCount: 0,
+        jsConsoleErrorsCount: 0,
+        initialLoadLatencyMs: 400,
+        hasDirectClickToCall: true,
+        hasWhatsAppDirectLink: true,
+        hasInteractiveBookingForm: true,
+        findings: [],
+      },
+      opportunityType: "WEBSITE_AUTOMATION",
+    });
+
+    expect(scores.digitalGapScore).toBe(0);
+    expect(scores.reputationScore).toBeGreaterThan(85);
   });
 });

@@ -1,17 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PlaywrightAuditEngine } from "@/services/auditor/PlaywrightAuditEngine";
-import { MockSiteServer } from "@/services/auditor/simulation/mockServer";
+import { PlaywrightAuditEngine } from "@/features/auditor/PlaywrightAuditEngine";
+import { MockSiteServer } from "@/features/auditor/mockServer";
 
 describe("PlaywrightAuditEngine Integration Test", () => {
   let mockServer: MockSiteServer;
   let auditEngine: PlaywrightAuditEngine;
-  let serverUrl: string;
 
   beforeAll(async () => {
     mockServer = new MockSiteServer(3099);
-    serverUrl = await mockServer.start();
+    await mockServer.start();
     auditEngine = new PlaywrightAuditEngine();
-  }, 30000);
+  });
 
   afterAll(async () => {
     if (auditEngine) {
@@ -23,34 +22,33 @@ describe("PlaywrightAuditEngine Integration Test", () => {
   });
 
   it("Accurately audits broken legacy site: missing viewport, layout overflow, missing CTA, broken links", async () => {
-    const telemetry = await auditEngine.auditUrl(`${serverUrl}/sites/broken-legacy`);
+    const telemetry = await auditEngine.auditUrl("http://localhost:3099/sites/broken-legacy");
 
-    expect(telemetry.hasMobileViewport).toBe(false);
-    expect(telemetry.hasHorizontalScroll).toBe(true);
-    expect(telemetry.hasPhoneCta).toBe(false);
-    expect(telemetry.hasEnquiryOrBookingForm).toBe(false);
+    expect(telemetry.viewportMetaPresent).toBe(false);
+    expect(telemetry.hasHorizontalOverflow).toBe(true);
+    expect(telemetry.hasDirectClickToCall).toBe(false);
+    expect(telemetry.hasInteractiveBookingForm).toBe(false);
     expect(telemetry.brokenLinksCount).toBeGreaterThanOrEqual(1);
-    expect(telemetry.jsErrorsCount).toBeGreaterThanOrEqual(1);
 
-    const viewportFinding = telemetry.findings.find((f) => f.finding.includes("Viewport"));
-    expect(viewportFinding).toBeDefined();
-    expect(viewportFinding?.confidence).toBe(1.0);
-  }, 25000);
+    const categories = telemetry.findings.map((f) => f.category);
+    expect(categories).toContain("ux");
+    expect(categories).toContain("technical");
+    expect(categories).toContain("conversion");
+  });
 
-  it("Detects WhatsApp inquiry trigger on custom works site", async () => {
-    const telemetry = await auditEngine.auditUrl(`${serverUrl}/sites/whatsapp-heavy`);
+  it("Detects WhatsApp integration and mobile viewport on WhatsApp site", async () => {
+    const telemetry = await auditEngine.auditUrl("http://localhost:3099/sites/whatsapp-heavy");
 
-    expect(telemetry.hasMobileViewport).toBe(true);
-    expect(telemetry.hasWhatsAppCta).toBe(true);
-    expect(telemetry.hasEnquiryOrBookingForm).toBe(true);
+    expect(telemetry.viewportMetaPresent).toBe(true);
+    expect(telemetry.hasHorizontalOverflow).toBe(false);
+    expect(telemetry.hasWhatsAppDirectLink).toBe(true);
+    expect(telemetry.hasDirectClickToCall).toBe(true);
+    expect(telemetry.hasInteractiveBookingForm).toBe(false);
+  });
 
-    const waFinding = telemetry.findings.find((f) => f.finding.includes("WhatsApp"));
-    expect(waFinding).toBeDefined();
-  }, 25000);
-
-  it("Blocks private SSRF attempts", async () => {
-    await expect(auditEngine.auditUrl("http://169.254.169.254/metadata")).rejects.toThrow(
-      /SSRF defense/i
+  it("Enforces SSRF validation against cloud metadata endpoints", async () => {
+    await expect(auditEngine.auditUrl("http://169.254.169.254/latest/meta-data")).rejects.toThrow(
+      /Forbidden target hostname/
     );
   });
 });

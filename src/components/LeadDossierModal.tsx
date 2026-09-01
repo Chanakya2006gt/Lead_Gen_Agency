@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Lead, AuditFinding, HumanStatus, BusinessDossier } from "@/db/schema";
+import { Lead, AuditFinding, HumanStatus, BusinessDossier } from "@/core/db/schema";
 import { ScoreGauge } from "./ScoreGauge";
 import {
   X,

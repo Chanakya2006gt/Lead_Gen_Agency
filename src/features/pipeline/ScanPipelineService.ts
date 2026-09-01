@@ -1,15 +1,15 @@
-import { db } from "@/db";
-import { discoveryScans, leads, DiscoveryScan, Lead, InsertLead } from "@/db/schema";
+import { db } from "@/core/db";
+import { discoveryScans, leads } from "@/core/db/schema";
 import { eq } from "drizzle-orm";
-import { IDiscoveryAdapter } from "@/services/discovery/types";
-import { MockDiscoveryAdapter } from "@/services/discovery/MockDiscoveryAdapter";
-import { LiveGoogleMapsAdapter } from "@/services/discovery/LiveGoogleMapsAdapter";
-import { SerpApiGoogleMapsAdapter } from "@/services/discovery/SerpApiGoogleMapsAdapter";
-import { ApifyMapsAdapter } from "@/services/discovery/ApifyMapsAdapter";
-import { OutscraperAdapter } from "@/services/discovery/OutscraperAdapter";
-import { UniversalFilterService } from "@/services/filter/UniversalFilterService";
-import { PlaywrightAuditEngine } from "@/services/auditor/PlaywrightAuditEngine";
-import { DossierSynthesizer } from "@/services/synthesis/DossierSynthesizer";
+import { IDiscoveryAdapter } from "@/features/discovery/types";
+import { MockDiscoveryAdapter } from "@/features/discovery/MockDiscoveryAdapter";
+import { LiveGoogleMapsAdapter } from "@/features/discovery/LiveGoogleMapsAdapter";
+import { SerpApiGoogleMapsAdapter } from "@/features/discovery/SerpApiGoogleMapsAdapter";
+import { ApifyMapsAdapter } from "@/features/discovery/ApifyMapsAdapter";
+import { OutscraperAdapter } from "@/features/discovery/OutscraperAdapter";
+import { UniversalFilterService } from "@/features/qualification/UniversalFilterService";
+import { PlaywrightAuditEngine } from "@/features/auditor/PlaywrightAuditEngine";
+import { DossierSynthesizer } from "@/features/synthesis/DossierSynthesizer";
 import crypto from "crypto";
 
 export interface ScanOptions {
@@ -21,30 +21,29 @@ export interface ScanOptions {
 
 export class ScanPipelineService {
   /**
-   * Executes full end-to-end discovery, qualification, audit, and synthesis pipeline
+   * Dispatches discovery & audit pipeline job in the background
    */
   public static async executeScan(options: ScanOptions): Promise<string> {
     const scanId = crypto.randomUUID();
-    const radiusKm = options.radiusKm || 15;
-    const nowIso = new Date().toISOString();
+    const now = new Date().toISOString();
 
-    // 1. Create Scan Record in DB
+    // 1. Initialize Scan record in DB
     db.insert(discoveryScans)
       .values({
         id: scanId,
         niche: options.niche,
         locationInput: options.location,
-        radiusKm,
+        radiusKm: options.radiusKm || 15,
         status: "RUNNING",
         rawDiscoveredCount: 0,
         qualifiedCount: 0,
-        createdAt: nowIso,
+        createdAt: now,
       })
       .run();
 
-    // Run asynchronously in background
+    // 2. Launch background execution asynchronously
     this.runPipelineJob(scanId, options).catch((err) => {
-      console.error(`Pipeline job ${scanId} failed:`, err);
+      console.error(`Pipeline job failed for scan ${scanId}:`, err);
       db.update(discoveryScans)
         .set({ status: "FAILED" })
         .where(eq(discoveryScans.id, scanId))
@@ -102,11 +101,11 @@ export class ScanPipelineService {
 
     try {
       for (const business of rawBusinesses) {
-        // Step B: Universal Filter Evaluation
+        // Step B: Universal 13 Invariant Qualification
         const filterResult = UniversalFilterService.evaluate(business);
 
-        if (!filterResult.isQualified) {
-          continue; // Dropped at qualification gate
+        if (!filterResult.qualified) {
+          continue; // Hard gate rejection
         }
 
         qualifiedCount++;
@@ -211,9 +210,15 @@ export class ScanPipelineService {
             },
           })
           .run();
+
+        // Update running qualified count on scan record
+        db.update(discoveryScans)
+          .set({ qualifiedCount })
+          .where(eq(discoveryScans.id, scanId))
+          .run();
       }
 
-      // Mark Scan Complete
+      // Mark scan as COMPLETED
       db.update(discoveryScans)
         .set({
           status: "COMPLETED",

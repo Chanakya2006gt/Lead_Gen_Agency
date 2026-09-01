@@ -1,5 +1,5 @@
 import { IDiscoveryAdapter, DiscoveryParams } from "./types";
-import { RawBusinessInput, RawReviewTimestamp } from "@/services/filter/UniversalFilterService";
+import { RawBusinessInput, RawReviewTimestamp } from "@/features/qualification/UniversalFilterService";
 
 export class SerpApiGoogleMapsAdapter implements IDiscoveryAdapter {
   public readonly name = "SerpApiGoogleMapsAdapter";
@@ -14,7 +14,7 @@ export class SerpApiGoogleMapsAdapter implements IDiscoveryAdapter {
       throw new Error("SerpAPI API key is not configured in environment (SERPAPI_API_KEY).");
     }
 
-    const { niche, location, radiusKm, maxResults = 20 } = params;
+    const { niche, location, maxResults = 20 } = params;
     const query = `${niche} in ${location}`;
 
     const url = `https://serpapi.com/search.json?engine=google_maps&q=${encodeURIComponent(
@@ -35,7 +35,6 @@ export class SerpApiGoogleMapsAdapter implements IDiscoveryAdapter {
       const rating = Number(item.rating || 0);
       const reviewCount = Number(item.reviews || 0);
 
-      // Generate review distribution based on real review metrics
       const reviews: RawReviewTimestamp[] = [];
       const reviewsLast30d = Math.max(1, Math.min(15, Math.floor(reviewCount * 0.05)));
       const reviewsLast90d = Math.max(reviewsLast30d, Math.min(45, Math.floor(reviewCount * 0.12)));

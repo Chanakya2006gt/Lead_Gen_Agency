@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Lead, OpportunityType, ReviewTrend, HumanStatus } from "@/db/schema";
+import { Lead, OpportunityType, ReviewTrend, HumanStatus } from "@/core/db/schema";
 import { ScoreGauge } from "./ScoreGauge";
 import {
   ExternalLink,

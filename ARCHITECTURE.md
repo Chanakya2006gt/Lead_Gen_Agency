@@ -1,186 +1,124 @@
-# System Architecture Document
-## Project: Private Client Discovery & High-Conviction Lead Engine (V1)
+# ARCHITECTURE: Lead Engine (V1)
+### Modular Feature-Driven (DDD) Subsystem Specifications
 
 ---
 
-## 1. High-Level Architecture Overview
-
-The system is architected as a modular, pipeline-driven engine with decoupled layers for **Data Discovery**, **Qualification Filtering**, **Headless Auditing**, **Synthesis & Scoring**, **Persistence**, and **Command Center Presentation**.
+## 1. Directory & Subsystem Layout
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    Command Center UI (Next.js 15 App)                   │
-│      [Launch Scan] ── [Lead Matrix Table] ── [Lead Dossier Inspector]   │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     │ Trigger / Query
-                                     ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     API & Pipeline Controller Layer                     │
-│               POST /api/scans  |  GET /api/scans/:id/leads              │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     │
-           ┌─────────────────────────┴─────────────────────────┐
-           ▼                                                   ▼
-┌───────────────────────────────┐               ┌───────────────────────────────┐
-│ Discovery Ingestion Adapters  │               │   Universal Invariant Filter  │
-│  - ApifyMapsAdapter           │ ──Raw Data──► │   - Rating >= 4.0             │
-│  - OutscraperAdapter          │               │   - Review Count >= 50        │
-│  - MockDiscoveryAdapter       │               │   - 30d/90d/180d Momentum     │
-└───────────────────────────────┘               └───────────────┬───────────────┘
-                                                                │
-                                     ┌──────────────────────────┴──────────────────────────┐
-                                     ▼ website == null                                     ▼ website != null
-                      ┌──────────────────────────────┐                      ┌──────────────────────────────┐
-                      │ No-Website Fast Track Handler│                      │ Playwright Audit Engine      │
-                      │ - Sets Status = NO_WEBSITE   │                      │ - Mobile (375x812) Viewport  │
-                      │ - Max Digital Gap Score      │                      │ - Desktop (1440x900) Viewport│
-                      │ - Immediate Priority         │                      │ - SSL/DOM/CTA/Speed Telemetry│
-                      └──────────────┬───────────────┘                      └──────────────┬───────────────┘
-                                     │                                                     │
-                                     └──────────────────────────┬──────────────────────────┘
-                                                                ▼
-                                                ┌───────────────────────────────┐
-                                                │ Synthesis & Scoring Engine    │
-                                                │ - 4D Dynamic Score Math       │
-                                                │ - Operational Opportunity Tier│
-                                                │ - AI / Deterministic Dossier  │
-                                                └───────────────┬───────────────┘
-                                                                │
-                                                                ▼
-                                                ┌───────────────────────────────┐
-                                                │ PostgreSQL (Drizzle ORM)      │
-                                                │ - discovery_scans table       │
-                                                │ - leads table (JSONB dossiers)│
-                                                └───────────────────────────────┘
-```
-
----
-
-## 2. Core Components & Subsystems
-
-### 2.1 Discovery & Adapter Layer (`src/services/discovery/`)
-- **`DiscoveryAdapter` Interface**: Defines contract `discover(params: DiscoveryParams): Promise<RawBusinessRecord[]>`.
-- **`ApifyMapsAdapter`**: Connects to Apify Google Maps & Reviews Actor.
-- **`OutscraperAdapter`**: Alternative connector for Outscraper Maps API.
-- **`MockDiscoveryAdapter`**: Built-in high-fidelity synthetic fixture adapter generating real-world business distributions for local testing without API credit consumption.
-
-### 2.2 Universal Filter & Recency Engine (`src/services/filter/`)
-- **`UniversalFilterService`**:
-  - Validates `rating >= 4.0` and `review_count >= 50`.
-  - Parses review timestamps to compute:
-    - $\text{reviews}_{30\text{d}}$, $\text{reviews}_{90\text{d}}$, $\text{reviews}_{180\text{d}}$, and $\text{last\_review\_date}$.
-  - Computes velocity trajectory:
-    - $R_v = \frac{\text{reviews}_{30\text{d}} \times 3}{\text{reviews}_{90\text{d}} + 0.001}$
-    - Maps to `GROWING`, `STABLE`, `DECLINING`, `STALE`, `UNKNOWN`.
-
-### 2.3 Headless Playwright Audit Engine (`src/services/auditor/`)
-- **`PlaywrightAuditEngine`**:
-  - Manages browser pools and isolated browser contexts.
-  - Context 1: **Mobile** (`viewport: { width: 375, height: 812 }`, `isMobile: true`, `hasTouch: true`).
-  - Context 2: **Desktop** (`viewport: { width: 1440, height: 900 }`).
-  - Captures:
-    1. **Security & Protocol**: HTTPS active, valid SSL, redirect chain.
-    2. **Mobile UX**: Presence of `<meta name="viewport">`, horizontal scroll/overflow detection via `document.documentElement.scrollWidth > window.innerWidth`.
-    3. **Performance**: DOM Content Loaded, First Paint, TTFB, navigation timing.
-    4. **Conversion Elements**:
-       - `tel:` links (`a[href^="tel:"]`).
-       - `mailto:` links (`a[href^="mailto:"]`).
-       - WhatsApp chat triggers (`a[href*="wa.me"]`, `a[href*="api.whatsapp.com"]`).
-       - Contact / Booking forms (`form`, `button` with keywords: book, schedule, appointment, quote, contact, enquiry).
-    5. **DOM Health**: Broken link verification on top navigation, console/runtime error interception.
-  - Outputs structured, type-safe `AuditTelemetry`.
-
-### 2.4 Scoring & Classification Engine (`src/services/scoring/`)
-- **Scoring Formulas (Normalized 0 – 100)**:
-  - **Reputation Score** ($S_{\text{rep}}$):
-    $$S_{\text{rep}} = \min(100, (\text{rating} - 4.0) \times 50 + \min(30, \text{review\_count} \times 0.05) + \text{velocityBonus})$$
-  - **Digital Gap Score** ($S_{\text{gap}}$):
-    - No website: $100$
-    - With website: $\sum \text{penalty}(\text{SSL missing}, \text{no viewport}, \text{no CTAs}, \text{slow speed}, \text{broken links})$
-  - **Opportunity Score** ($S_{\text{opp}}$):
-    - Evaluates business niche complexity (e.g. Clinic/Dental/Contractor = high operational leverage) + lack of digital systems.
-  - **Evidence Confidence Score** ($S_{\text{conf}}$):
-    - Percentage of audit telemetry points with empirical DOM proof ($1.0 = 100\%$).
-  - **Total Lead Score** ($S_{\text{total}}$):
-    $$S_{\text{total}} = 0.35 \times S_{\text{rep}} + 0.30 \times S_{\text{gap}} + 0.20 \times S_{\text{opp}} + 0.15 \times S_{\text{conf}}$$
-
-### 2.5 AI & Grounded Dossier Synthesizer (`src/services/synthesis/`)
-- **`DossierSynthesizer`**:
-  - Classifies into `WEBSITE`, `WEBSITE_AUTOMATION`, `CUSTOM_OPERATIONAL_SOFTWARE`.
-  - **LLM Mode**: Uses structured JSON schema with OpenAI/Gemini to produce tailored pitch angles.
-  - **Deterministic Rule-Based Fallback**: Formulates exact pitch angles and bottlenecks directly from audit telemetry when API keys are unconfigured, guaranteeing 100% offline uptime.
-
----
-
-## 3. Data Flow & State Machine
-
-```
-[Start Scan]
-     │
-     ▼
-[STATUS: RUNNING] ──► Ingest Google Maps records
-     │
-     ▼
-[Filter Engine] ────► Reject unqualified (rating < 4.0 or reviews < 50)
-     │
-     ├─► [website == null] ──► Set NO_WEBSITE ──► Compute Dossier ──► [STATUS: COMPLETED]
-     │
-     └─► [website != null] ──► Playwright Audit ──► Compute Dossier ──► [STATUS: COMPLETED]
-                                    │ (on network crash / timeout)
-                                    ▼
-                               [STATUS: AUDIT_FAILED with fallback dossier]
+src/
+├── 🌐 app/                          # Next.js App Router (HTTP Controllers & Routing)
+│   ├── api/
+│   │   ├── scans/route.ts           # POST (dispatch pipeline), GET (list scans)
+│   │   ├── scans/[id]/route.ts      # GET (scan status & ranked leads)
+│   │   ├── leads/[id]/status/       # PATCH (triage state transition)
+│   │   └── leads/export/route.ts    # GET (CSV stream export)
+│   ├── globals.css                  # Dark obsidian theme & animations
+│   ├── layout.tsx                   # Root HTML & security header injection
+│   └── page.tsx                     # Dynamic Server Component entrypoint
+│
+├── 🧠 features/                     # Core Business Domain Modules
+│   ├── discovery/                   # Real-Time Search & Scraping
+│   │   ├── types.ts                 # IDiscoveryAdapter interface
+│   │   ├── LiveGoogleMapsAdapter.ts # Headless Chromium real-time Google Maps crawler
+│   │   ├── SerpApiGoogleMapsAdapter.ts # Structured Google Maps REST API
+│   │   ├── MockDiscoveryAdapter.ts  # Zero-cost local fixture simulator
+│   │   ├── ApifyMapsAdapter.ts      # Apify Actor integration
+│   │   └── OutscraperAdapter.ts     # Outscraper REST client
+│   │
+│   ├── auditor/                     # Headless Chromium DOM & UX Auditor
+│   │   ├── types.ts                 # IAuditEngine interface
+│   │   ├── PlaywrightAuditEngine.ts # Dual-viewport mobile (375x812) & desktop DOM inspection
+│   │   └── mockServer.ts            # Embedded simulation server (port 3099)
+│   │
+│   ├── qualification/               # Mathematical Invariants & 4D Scoring
+│   │   ├── UniversalFilterService.ts # Rating >= 4.0, Reviews >= 50, Recency velocity
+│   │   ├── ScoringEngine.ts         # S_rep, S_gap, S_opp, S_conf -> S_total
+│   │   └── OpportunityClassifier.ts # WEBSITE, WEBSITE_AUTOMATION, CUSTOM_OPS_SOFTWARE
+│   │
+│   ├── synthesis/                   # Surgical Pitch Deck Formulation
+│   │   └── DossierSynthesizer.ts    # Multi-channel copy (Email, WhatsApp, Phone, Scope)
+│   │
+│   └── pipeline/                    # Async Background Job Orchestration
+│       └── ScanPipelineService.ts   # Upsert persistence on leads.place_id
+│
+├── 🗄️ core/                         # Universal Foundation Layer
+│   ├── db/
+│   │   ├── index.ts                 # Multi-engine connector (Supabase Postgres / SQLite)
+│   │   └── schema.ts                # Drizzle ORM tables & TypeScript interfaces
+│   └── types/                       # Shared utility types
+│
+└── 🎨 components/                   # Presentation Layer (React UI)
+    ├── DashboardClient.tsx          # Real-time state manager & active scan polling
+    ├── Header.tsx                   # Live telemetry navigation & stats
+    ├── ScanLauncher.tsx             # Interactive launchpad & market presets
+    ├── LeadMatrixTable.tsx          # Studio data grid with glowing score rings
+    ├── LeadDossierModal.tsx         # Slide-over surgical outreach copy studio
+    └── ScoreGauge.tsx               # Ambient glowing score visualizer
 ```
 
 ---
 
-## 4. Database Schema Specification
+## 2. Data Flow & Processing Lifecycle
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Operator / Recruiter
+    participant UI as DashboardClient (UI)
+    participant API as App Router (/api/scans)
+    participant Pipe as ScanPipelineService
+    participant Disc as LiveGoogleMapsAdapter / SerpAPI
+    participant Filter as UniversalFilterService
+    participant Audit as PlaywrightAuditEngine
+    participant Synth as DossierSynthesizer
+    participant DB as Supabase PostgreSQL / SQLite
+
+    User->>UI: Select niche & market -> Click "Launch Discovery"
+    UI->>API: POST /api/scans
+    API->>Pipe: executeScan({ niche, location, source })
+    Pipe->>DB: INSERT INTO discovery_scans (status: 'RUNNING')
+    API-->>UI: 201 Created (scanId)
+
+    par Background Pipeline Execution
+        Pipe->>Disc: discover({ niche, location })
+        Disc-->>Pipe: rawBusinesses[]
+        
+        loop For Each Business
+            Pipe->>Filter: evaluate(business)
+            alt Qualified (rating >= 4.0 & reviews >= 50)
+                alt Has Website
+                    Pipe->>Audit: auditUrl(websiteUrl)
+                    Audit-->>Pipe: AuditTelemetry (DOM findings, viewport, CTAs)
+                else No Website
+                    Note over Pipe: Fast-Track (NO_WEBSITE)
+                end
+                Pipe->>Synth: synthesize(business, auditTelemetry)
+                Synth-->>Pipe: BusinessDossier + 4D Scores
+                Pipe->>DB: UPSERT INTO leads ON CONFLICT (place_id)
+            else Rejection Gate
+                Note over Pipe: Excluded from candidate pool
+            end
+        end
+        Pipe->>DB: UPDATE discovery_scans SET status = 'COMPLETED'
+    end
+
+    loop Every 2000ms Polling
+        UI->>API: GET /api/scans/:id
+        API->>DB: SELECT leads WHERE scan_id = :id
+        DB-->>API: rows[]
+        API-->>UI: 200 OK (scan, leads)
+        UI-->>User: Real-time updated Matrix & Score Rings
+    end
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      discovery_scans                        │
-├─────────────────────────────────────────────────────────────┤
-│ id: UUID (PK)                                               │
-│ niche: VARCHAR(100)                                         │
-│ location_input: VARCHAR(150)                                │
-│ radius_km: INT                                              │
-│ status: VARCHAR(50) [RUNNING | COMPLETED | FAILED]          │
-│ raw_discovered_count: INT                                   │
-│ qualified_count: INT                                        │
-│ created_at: TIMESTAMP WITH TIME ZONE                        │
-└──────────────────────────────┬──────────────────────────────┘
-                               │ 1:N
-                               ▼
-┌─────────────────────────────────────────────────────────────┐
-│                          leads                              │
-├─────────────────────────────────────────────────────────────┤
-│ id: UUID (PK)                                               │
-│ scan_id: UUID (FK -> discovery_scans.id)                    │
-│ place_id: VARCHAR(255) [UNIQUE]                             │
-│ name: VARCHAR(255)                                          │
-│ category: VARCHAR(150)                                      │
-│ formatted_address: TEXT                                     │
-│ phone: VARCHAR(50)                                          │
-│ google_maps_url: TEXT                                       │
-│ website_url: TEXT                                           │
-│ rating: NUMERIC(3,2)                                        │
-│ review_count: INT                                           │
-│ last_review_date: TIMESTAMP                                 │
-│ reviews_last_30_days: INT                                   │
-│ reviews_last_90_days: INT                                   │
-│ reviews_last_180_days: INT                                  │
-│ review_trend: VARCHAR(20) [GROWING|STABLE|DECLINING|STALE]  │
-│ has_website: BOOLEAN                                        │
-│ audit_status: VARCHAR(20) [PENDING|NO_WEBSITE|AUDITED|FAILED│
-│ audit_telemetry: JSONB                                      │
-│ reputation_score: INT                                       │
-│ digital_gap_score: INT                                      │
-│ opportunity_score: INT                                      │
-│ confidence_score: INT                                       │
-│ total_lead_score: INT                                       │
-│ opportunity_type: VARCHAR(30)                               │
-│ dossier: JSONB                                              │
-│ human_status: VARCHAR(30) [NEW|REVIEWED|OUTREACH|ARCHIVED]  │
-│ created_at: TIMESTAMP WITH TIME ZONE                        │
-│ updated_at: TIMESTAMP WITH TIME ZONE                        │
-└─────────────────────────────────────────────────────────────┘
-```
+
+---
+
+## 3. The 4-Dimension Mathematical Scoring Engine
+
+$$\begin{aligned}
+S_{\text{rep}} &= \min\left(50, \max\left(0, \frac{\text{rating} - 3.5}{1.5} \times 50\right)\right) + \min\left(30, \frac{\log_{10}(\text{reviews})}{\log_{10}(500)} \times 30\right) + \text{MomentumBonus} \\
+S_{\text{gap}} &= \begin{cases} 100 & \text{if No Website} \\ \min(100, \Delta_{\text{SSL}} + \Delta_{\text{viewport}} + \Delta_{\text{overflow}} + \Delta_{\text{CTA}} + \Delta_{\text{booking}}) & \text{if Audited} \end{cases} \\
+S_{\text{opp}} &= \begin{cases} 95 & \text{Custom Operational Software} \\ 85 & \text{Website + Automation} \\ 75 & \text{Website Gap} \end{cases} \\
+S_{\text{total}} &= \left(S_{\text{rep}} \times 0.35\right) + \left(S_{\text{gap}} \times 0.40\right) + \left(S_{\text{opp}} \times 0.25\right)
+\end{aligned}$$

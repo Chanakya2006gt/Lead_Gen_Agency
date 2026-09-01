@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { leads } from "@/db/schema";
-import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { db } from "@/core/db";
+import { leads, HumanStatus } from "@/core/db/schema";
+import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-const statusSchema = z.object({
+const updateStatusSchema = z.object({
   status: z.enum(["NEW", "REVIEWED", "READY_FOR_OUTREACH", "ARCHIVED"]),
 });
 
@@ -18,16 +18,12 @@ export async function PATCH(
     const params = await props.params;
     const leadId = params.id;
     const body = await request.json();
-
-    const parsed = statusSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-    }
+    const validated = updateStatusSchema.parse(body);
 
     const updated = db
       .update(leads)
       .set({
-        humanStatus: parsed.data.status,
+        humanStatus: validated.status as HumanStatus,
         updatedAt: new Date().toISOString(),
       })
       .where(eq(leads.id, leadId))
@@ -38,8 +34,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ lead: updated });
+    return NextResponse.json({
+      message: "Status updated successfully",
+      lead: updated,
+    });
   } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: err.errors }, { status: 400 });
+    }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

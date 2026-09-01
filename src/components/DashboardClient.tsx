@@ -5,7 +5,7 @@ import { Header } from "@/components/Header";
 import { ScanLauncher } from "@/components/ScanLauncher";
 import { LeadMatrixTable } from "@/components/LeadMatrixTable";
 import { LeadDossierModal } from "@/components/LeadDossierModal";
-import { Lead, DiscoveryScan, HumanStatus } from "@/db/schema";
+import { Lead, DiscoveryScan, HumanStatus } from "@/core/db/schema";
 import { Loader2, RefreshCw, Layers, Sparkles } from "lucide-react";
 
 export function DashboardClient() {

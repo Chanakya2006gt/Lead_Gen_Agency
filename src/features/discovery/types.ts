@@ -1,13 +1,13 @@
-import { RawBusinessInput } from "@/services/filter/UniversalFilterService";
+import { RawBusinessInput } from "@/features/qualification/UniversalFilterService";
 
 export interface DiscoveryParams {
   niche: string;
   location: string;
-  radiusKm: number;
+  radiusKm?: number;
   maxResults?: number;
 }
 
 export interface IDiscoveryAdapter {
-  name: string;
+  readonly name: string;
   discover(params: DiscoveryParams): Promise<RawBusinessInput[]>;
 }

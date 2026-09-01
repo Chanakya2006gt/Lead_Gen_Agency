@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { discoveryScans, leads } from "@/db/schema";
-import { desc } from "drizzle-orm";
-import { ScanPipelineService } from "@/services/pipeline/ScanPipelineService";
 import { z } from "zod";
+import { db } from "@/core/db";
+import { discoveryScans, leads } from "@/core/db/schema";
+import { ScanPipelineService } from "@/features/pipeline/ScanPipelineService";
+import { desc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -31,21 +31,26 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const parsed = createScanSchema.safeParse(body);
-
-    if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
-    }
+    const validated = createScanSchema.parse(body);
 
     const scanId = await ScanPipelineService.executeScan({
-      niche: parsed.data.niche,
-      location: parsed.data.location,
-      radiusKm: parsed.data.radiusKm,
-      source: parsed.data.source,
+      niche: validated.niche,
+      location: validated.location,
+      radiusKm: validated.radiusKm,
+      source: validated.source,
     });
 
-    return NextResponse.json({ scanId, status: "RUNNING" }, { status: 201 });
+    return NextResponse.json(
+      {
+        message: "Scan initialized and pipeline executing in background",
+        scanId,
+      },
+      { status: 201 }
+    );
   } catch (err: any) {
+    if (err instanceof z.ZodError) {
+      return NextResponse.json({ error: err.errors }, { status: 400 });
+    }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

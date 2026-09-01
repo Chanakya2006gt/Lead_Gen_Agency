@@ -1,6 +1,6 @@
-import { chromium, Browser } from "playwright";
-import { RawBusinessInput, RawReviewTimestamp } from "@/services/filter/UniversalFilterService";
-import { IDiscoveryAdapter, DiscoveryParams } from "@/services/discovery/types";
+import { chromium } from "playwright";
+import { RawBusinessInput, RawReviewTimestamp } from "@/features/qualification/UniversalFilterService";
+import { IDiscoveryAdapter, DiscoveryParams } from "./types";
 
 export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
   public readonly name = "LiveGoogleMapsAdapter";
@@ -49,7 +49,7 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
       try {
         await page.waitForSelector(feedSelector, { timeout: 8000 });
       } catch {
-        // Fallback or single result
+        // Fallback
       }
 
       // Scroll feed to load multiple business cards
@@ -68,7 +68,6 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
       // Extract listing items from DOM
       const rawPlaces = await page.evaluate((max) => {
         const items: any[] = [];
-        // Google Maps feed items typically have class or role article/link
         const links = Array.from(document.querySelectorAll('a[href*="/maps/place/"]'));
 
         for (const a of links) {
@@ -83,8 +82,6 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
 
           if (!name || items.some((p) => p.name === name)) continue;
 
-          // Parse Rating and Reviews
-          // Format usually contains "4.8(230)" or "4.8 ★ (230)" or "4.8 stars 230 reviews"
           const ratingMatch = text.match(/([1-5]\.\d)\s*★?/);
           const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 4.2;
 
@@ -93,11 +90,9 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
             ? parseInt(reviewCountMatch[1].replace(/,/g, ""), 10)
             : 65;
 
-          // Check if there's a website action button
           const websiteBtn = container.querySelector('a[data-value="Website"], a[href^="http"]:not([href*="google.com"])');
           const websiteUrl = websiteBtn ? (websiteBtn as HTMLAnchorElement).href : null;
 
-          // Phone / category signals in text snippet
           const phoneMatch = text.match(/(\+?\d[\d\s\-()]{8,}\d)/);
           const phone = phoneMatch ? phoneMatch[1].trim() : null;
 
@@ -116,9 +111,7 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
 
       const now = new Date();
 
-      // Convert into RawBusinessInput
       for (const item of rawPlaces) {
-        // Generate realistic review timestamps for recency estimation based on total volume
         const reviews: RawReviewTimestamp[] = [];
         const reviewsLast30d = Math.max(1, Math.min(15, Math.floor(item.reviewCount * 0.05)));
         const reviewsLast90d = Math.max(reviewsLast30d, Math.min(45, Math.floor(item.reviewCount * 0.12)));
@@ -148,7 +141,7 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
         });
       }
     } catch (err) {
-      console.warn("Live Google Maps scraping encountered an issue, falling back:", err);
+      console.warn("Live Google Maps scraping encountered an issue:", err);
     } finally {
       await context.close();
       await browser.close();

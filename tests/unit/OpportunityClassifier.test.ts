@@ -1,56 +1,56 @@
 import { describe, it, expect } from "vitest";
-import { OpportunityClassifier } from "@/services/synthesis/OpportunityClassifier";
+import { OpportunityClassifier } from "@/features/qualification/OpportunityClassifier";
 
-describe("OpportunityClassifier (Operational Software & Gap Tiering)", () => {
-  it("Classifies no-website business as WEBSITE tier", () => {
-    const result = OpportunityClassifier.classify(false, null, "Dental Clinic");
-    expect(result.type).toBe("WEBSITE");
-    expect(result.operationalSignals.length).toBeGreaterThan(0);
+describe("OpportunityClassifier (Operational Multi-Tier Classification)", () => {
+  it("Classifies NO WEBSITE as WEBSITE opportunity", () => {
+    const opp = OpportunityClassifier.classify({
+      hasWebsite: false,
+      reviewCount: 300,
+      rating: 4.8,
+      auditTelemetry: null,
+    });
+    expect(opp).toBe("WEBSITE");
   });
 
-  it("Classifies WhatsApp-heavy quotation business as CUSTOM_OPERATIONAL_SOFTWARE tier", () => {
-    const result = OpportunityClassifier.classify(
-      true,
-      {
-        isHttps: true,
-        hasMobileViewport: true,
-        hasHorizontalScroll: false,
-        domLoadTimeSec: 1.2,
-        hasPhoneCta: true,
-        hasWhatsAppCta: true,
-        hasEnquiryOrBookingForm: true,
+  it("Classifies high volume businesses with WhatsApp reliance as CUSTOM_OPERATIONAL_SOFTWARE", () => {
+    const opp = OpportunityClassifier.classify({
+      hasWebsite: true,
+      reviewCount: 450,
+      rating: 4.9,
+      auditTelemetry: {
+        viewportMetaPresent: true,
+        hasHorizontalOverflow: false,
+        hasSsl: true,
         brokenLinksCount: 0,
-        jsErrorsCount: 0,
-        extractedServices: [],
+        jsConsoleErrorsCount: 0,
+        initialLoadLatencyMs: 500,
+        hasDirectClickToCall: true,
+        hasWhatsAppDirectLink: true, // WhatsApp reliance
+        hasInteractiveBookingForm: false, // Missing automated booking
         findings: [],
       },
-      "Custom Roofing & Fabrication"
-    );
-
-    expect(result.type).toBe("CUSTOM_OPERATIONAL_SOFTWARE");
-    expect(result.operationalSignals.some((s) => s.includes("WhatsApp"))).toBe(true);
+    });
+    expect(opp).toBe("CUSTOM_OPERATIONAL_SOFTWARE");
   });
 
-  it("Classifies responsive website with missing booking calendar as WEBSITE_AUTOMATION tier", () => {
-    const result = OpportunityClassifier.classify(
-      true,
-      {
-        isHttps: true,
-        hasMobileViewport: true,
-        hasHorizontalScroll: false,
-        domLoadTimeSec: 1.1,
-        hasPhoneCta: true,
-        hasWhatsAppCta: false,
-        hasEnquiryOrBookingForm: false, // missing booking
+  it("Classifies modern sites missing booking forms as WEBSITE_AUTOMATION", () => {
+    const opp = OpportunityClassifier.classify({
+      hasWebsite: true,
+      reviewCount: 90,
+      rating: 4.5,
+      auditTelemetry: {
+        viewportMetaPresent: true,
+        hasHorizontalOverflow: false,
+        hasSsl: true,
         brokenLinksCount: 0,
-        jsErrorsCount: 0,
-        extractedServices: [],
+        jsConsoleErrorsCount: 0,
+        initialLoadLatencyMs: 500,
+        hasDirectClickToCall: true,
+        hasWhatsAppDirectLink: false,
+        hasInteractiveBookingForm: false,
         findings: [],
       },
-      "Medical & Dermatology Clinic"
-    );
-
-    expect(result.type).toBe("WEBSITE_AUTOMATION");
-    expect(result.operationalSignals.some((s) => s.includes("24/7 calendar booking"))).toBe(true);
+    });
+    expect(opp).toBe("WEBSITE_AUTOMATION");
   });
 });

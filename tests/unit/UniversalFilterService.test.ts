@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { UniversalFilterService, RawBusinessInput } from "@/services/filter/UniversalFilterService";
+import { UniversalFilterService, RawBusinessInput } from "@/features/qualification/UniversalFilterService";
 
 describe("UniversalFilterService (Core Invariant Verification)", () => {
   const baseNow = new Date("2026-09-01T12:00:00Z");
@@ -12,9 +12,9 @@ describe("UniversalFilterService (Core Invariant Verification)", () => {
       reviewCount: 1000,
     };
 
-    const result = UniversalFilterService.evaluate(business, 3, baseNow);
-    expect(result.isQualified).toBe(false);
-    expect(result.rejectionReason).toContain("Rating 3.99 is below minimum threshold 4.0");
+    const result = UniversalFilterService.evaluate(business, baseNow);
+    expect(result.qualified).toBe(false);
+    expect(result.unqualifiedReason).toContain("Rating (3.99) is below required minimum threshold (4)");
   });
 
   it("Gate 2: Rejects review count below 50 (e.g. 49 reviews) even with 5.0★ rating", () => {
@@ -25,9 +25,9 @@ describe("UniversalFilterService (Core Invariant Verification)", () => {
       reviewCount: 49,
     };
 
-    const result = UniversalFilterService.evaluate(business, 3, baseNow);
-    expect(result.isQualified).toBe(false);
-    expect(result.rejectionReason).toContain("Review count 49 is below minimum threshold 50");
+    const result = UniversalFilterService.evaluate(business, baseNow);
+    expect(result.qualified).toBe(false);
+    expect(result.unqualifiedReason).toContain("Review count (49) is below required minimum threshold (50)");
   });
 
   it("Gate 1 & 2: Qualifies exactly 4.0 rating and 50 reviews", () => {
@@ -44,8 +44,8 @@ describe("UniversalFilterService (Core Invariant Verification)", () => {
       ],
     };
 
-    const result = UniversalFilterService.evaluate(business, 3, baseNow);
-    expect(result.isQualified).toBe(true);
+    const result = UniversalFilterService.evaluate(business, baseNow);
+    expect(result.qualified).toBe(true);
     expect(result.rating).toBe(4.0);
     expect(result.reviewCount).toBe(50);
     expect(result.hasWebsite).toBe(true);
@@ -68,8 +68,8 @@ describe("UniversalFilterService (Core Invariant Verification)", () => {
       reviews,
     };
 
-    const result = UniversalFilterService.evaluate(business, 3, baseNow);
-    expect(result.isQualified).toBe(true);
+    const result = UniversalFilterService.evaluate(business, baseNow);
+    expect(result.qualified).toBe(true);
     expect(result.reviewsLast30Days).toBe(4);
     expect(result.reviewsLast90Days).toBe(5);
     expect(result.reviewTrend).toBe("GROWING");
@@ -89,8 +89,8 @@ describe("UniversalFilterService (Core Invariant Verification)", () => {
       reviews,
     };
 
-    const result = UniversalFilterService.evaluate(business, 3, baseNow);
-    expect(result.isQualified).toBe(true);
+    const result = UniversalFilterService.evaluate(business, baseNow);
+    expect(result.qualified).toBe(true);
     expect(result.reviewsLast30Days).toBe(0);
     expect(result.reviewsLast90Days).toBe(0);
     expect(result.reviewTrend).toBe("STALE");

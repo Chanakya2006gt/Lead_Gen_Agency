@@ -1,5 +1,5 @@
 import { IDiscoveryAdapter, DiscoveryParams } from "./types";
-import { RawBusinessInput, RawReviewTimestamp } from "@/services/filter/UniversalFilterService";
+import { RawBusinessInput, RawReviewTimestamp } from "@/features/qualification/UniversalFilterService";
 
 export class OutscraperAdapter implements IDiscoveryAdapter {
   public readonly name = "OutscraperAdapter";
@@ -14,28 +14,30 @@ export class OutscraperAdapter implements IDiscoveryAdapter {
       throw new Error("Outscraper API key is not configured in environment (OUTSCRAPER_API_KEY).");
     }
 
-    const { niche, location, radiusKm, maxResults = 50 } = params;
+    const { niche, location, maxResults = 20 } = params;
     const query = `${niche}, ${location}`;
 
     const url = `https://api.app.outscraper.com/maps/search-v3?query=${encodeURIComponent(
       query
-    )}&limit=${maxResults}&reviewsLimit=25&async=false`;
+    )}&limit=${maxResults}&async=false`;
 
     const response = await fetch(url, {
-      headers: { "X-API-KEY": this.apiKey },
+      headers: {
+        "X-API-KEY": this.apiKey,
+      },
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Outscraper API failed (${response.status}): ${errorText}`);
+      throw new Error(`Outscraper request failed with status ${response.status}: ${errorText}`);
     }
 
-    const json = await response.json();
-    const results: any[] = json.data?.[0] || [];
+    const data = await response.json();
+    const results: any[] = data.data?.[0] || [];
 
     return results.map((item) => {
       const reviews: RawReviewTimestamp[] = (item.reviews_data || []).map((r: any) => ({
-        publishedAtDate: r.google_review_datetime_utc || r.review_datetime_utc,
+        publishedAtDate: r.google_order_date || r.snippet_date || new Date().toISOString(),
       }));
 
       return {
@@ -46,7 +48,7 @@ export class OutscraperAdapter implements IDiscoveryAdapter {
         reviewCount: Number(item.reviews || 0),
         websiteUrl: item.site || item.website || null,
         phone: item.phone || null,
-        formattedAddress: item.full_address || item.formatted_address || null,
+        formattedAddress: item.full_address || location,
         googleMapsUrl: item.location_link || null,
         reviews,
       };

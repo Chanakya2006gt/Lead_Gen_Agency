@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { MockSiteServer } from "../../src/services/auditor/simulation/mockServer";
+import { MockSiteServer } from "../../src/features/auditor/mockServer";
 
 test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
   let mockServer: MockSiteServer;
