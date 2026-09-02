@@ -7,7 +7,7 @@ import { LeadMatrixTable } from "@/components/LeadMatrixTable";
 import { LeadDossierModal } from "@/components/LeadDossierModal";
 import { LiveTerminal } from "@/components/LiveTerminal";
 import { Lead, DiscoveryScan, HumanStatus } from "@/core/db/schema";
-import { Loader2, RefreshCw, Layers, Sparkles, X } from "lucide-react";
+import { Loader2, RefreshCw, X } from "lucide-react";
 
 export function DashboardClient() {
   const [scans, setScans] = useState<DiscoveryScan[]>([]);
@@ -139,7 +139,6 @@ export function DashboardClient() {
       });
 
       if (res.ok) {
-        // Update local state
         setLeads((prev) =>
           prev.map((l) => (l.id === leadId ? { ...l, humanStatus: status } : l))
         );
@@ -155,7 +154,7 @@ export function DashboardClient() {
   const highPriorityCount = leads.filter((l) => !l.hasWebsite).length;
 
   return (
-    <div className="min-h-screen bg-[#070A0F] flex flex-col text-slate-100 selection:bg-indigo-500/30 selection:text-indigo-200">
+    <div className="min-h-screen bg-[#090B10] flex flex-col text-slate-100">
       <Header
         totalScans={scans.length}
         totalQualified={leads.length}
@@ -163,7 +162,7 @@ export function DashboardClient() {
         activeScanId={activeScanId}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-5">
         {/* Discovery Launchpad */}
         <ScanLauncher
           onScanLaunched={handleScanLaunched}
@@ -172,7 +171,7 @@ export function DashboardClient() {
           activeScanId={activeScanId}
         />
 
-        {/* Live Pipeline Telemetry Drawer */}
+        {/* Live Pipeline Status */}
         <LiveTerminal
           isScanning={isScanning}
           activeScan={activeScan}
@@ -180,10 +179,10 @@ export function DashboardClient() {
 
         {/* Scan Selector Tabs Bar */}
         {scans.length > 0 && (
-          <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 border-b border-white/[0.08]">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono uppercase text-slate-500 font-semibold mr-1 flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-indigo-400" /> Scans:
+          <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 border-b border-white/[0.06]">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-500 font-medium mr-1">
+                Scans:
               </span>
               {scans.map((scan) => {
                 const isActive = scan.id === activeScanId;
@@ -191,31 +190,31 @@ export function DashboardClient() {
                   <div
                     key={scan.id}
                     onClick={() => setActiveScanId(scan.id)}
-                    className={`group/tab relative px-3 py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 cursor-pointer select-none ${
+                    className={`group/tab relative px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 cursor-pointer select-none ${
                       isActive
-                        ? "bg-indigo-600/25 text-indigo-200 border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
-                        : "bg-[#0D131F] hover:bg-white/[0.05] text-slate-400 hover:text-slate-200 border border-white/[0.08]"
+                        ? "bg-white/[0.1] text-white border border-white/[0.12]"
+                        : "bg-white/[0.02] hover:bg-white/[0.05] text-slate-400 hover:text-slate-200 border border-transparent"
                     }`}
                   >
                     <span>
-                      {scan.niche} <span className="text-slate-500 font-normal">({scan.locationInput})</span>
+                      {scan.niche} <span className="text-slate-500">({scan.locationInput})</span>
                     </span>
                     {scan.status === "RUNNING" ? (
                       <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
                     ) : (
-                      <span className="font-mono text-[10px] text-slate-400 bg-white/[0.04] px-1.5 py-0.5 rounded">
+                      <span className="text-[11px] text-slate-400 font-normal">
                         {scan.qualifiedCount} leads
                       </span>
                     )}
 
-                    {/* Delete Scan / Close Tab Button */}
+                    {/* Delete Scan / Close Tab */}
                     <button
                       type="button"
                       onClick={(e) => handleDeleteScan(scan.id, e)}
-                      className="opacity-50 group-hover/tab:opacity-100 p-0.5 rounded-md hover:bg-rose-500/25 hover:text-rose-300 text-slate-400 transition cursor-pointer ml-0.5"
+                      className="opacity-0 group-hover/tab:opacity-100 p-0.5 rounded hover:bg-white/[0.1] text-slate-400 hover:text-slate-200 transition cursor-pointer ml-0.5"
                       title="Delete this scan"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-3 h-3" />
                     </button>
                   </div>
                 );
@@ -227,7 +226,7 @@ export function DashboardClient() {
                 fetchScans();
                 if (activeScanId) fetchScanDetails(activeScanId);
               }}
-              className="p-2 rounded-xl bg-[#0D131F] hover:bg-white/[0.06] border border-white/[0.08] text-slate-400 hover:text-white transition cursor-pointer"
+              className="p-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white transition cursor-pointer"
               title="Refresh Pipeline"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -235,42 +234,7 @@ export function DashboardClient() {
           </div>
         )}
 
-        {/* Live Ingestion / Audit Active Banner */}
-        {isScanning && (
-          <div className="bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-indigo-950/60 border border-indigo-500/40 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs text-indigo-200 shadow-xl backdrop-blur-xl animate-pulse">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-400 shrink-0">
-                <Loader2 className="w-4 h-4 animate-spin" />
-              </div>
-              <div>
-                <span className="font-bold text-white block">
-                  Scraping &amp; Auditing Live Targets for {activeScan?.niche || "Niche"} in {activeScan?.locationInput || "Market"}
-                </span>
-                <span className="text-[11px] text-indigo-300">
-                  Executing Headless Chromium Dual-Viewport Audits across mobile &amp; desktop...
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleCancelScan}
-                data-testid="btn-stop-active-scan"
-                className="px-3.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 border border-rose-500/40 text-rose-300 font-bold flex items-center gap-1.5 transition text-xs active:scale-95 cursor-pointer shadow-lg"
-              >
-                <span className="w-2 h-2 rounded-sm bg-rose-400" />
-                <span>Stop Scan</span>
-              </button>
-
-              <span className="font-mono text-[10px] uppercase font-bold text-indigo-400 bg-indigo-500/10 px-2.5 py-1 rounded-full border border-indigo-500/20">
-                13 Invariants Active
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Lead Matrix Table */}
+        {/* Lead Matrix Table (The Star of the System) */}
         <LeadMatrixTable
           leads={leads}
           onSelectLead={(lead) => setSelectedLead(lead)}
@@ -279,7 +243,7 @@ export function DashboardClient() {
         />
       </main>
 
-      {/* Dossier Modal Drawer */}
+      {/* Sales Intelligence Dossier Modal */}
       <LeadDossierModal
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}

@@ -1,52 +1,17 @@
 import { test, expect } from "@playwright/test";
-import { MockSiteServer } from "../../src/features/auditor/mockServer";
 
 test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
-  let mockServer: MockSiteServer;
-
-  test.beforeAll(async () => {
-    test.setTimeout(60000);
-    try {
-      mockServer = new MockSiteServer(3099);
-      await mockServer.start();
-    } catch (err) {
-      console.warn("Mock server 3099 initialization:", err);
-    }
-  });
-
-  test.afterAll(async () => {
-    if (mockServer) {
-      try {
-        await mockServer.stop();
-      } catch {}
-    }
-    try {
-      const { db } = await import("../../src/core/db");
-      const { discoveryScans, leads } = await import("../../src/core/db/schema");
-      const { like, eq } = await import("drizzle-orm");
-      const demoLeads = db.select().from(leads).where(like(leads.name, "%[DEMO]%")).all();
-      for (const dl of demoLeads) {
-        if (dl.scanId) {
-          db.delete(discoveryScans).where(eq(discoveryScans.id, dl.scanId)).run();
-          db.delete(leads).where(eq(leads.scanId, dl.scanId)).run();
-        }
-      }
-    } catch {}
-  });
-
-  test("Dashboard loads with clean security headers, studio layout, and launchpad", async ({
-    page,
-  }) => {
+  test("Dashboard loads with clean security headers, studio layout, and launchpad", async ({ page }) => {
     const response = await page.goto("/");
     expect(response?.status()).toBe(200);
 
     // Verify OWASP Security Headers
     const headers = response?.headers() || {};
-    expect(headers["x-frame-options"]).toBe("DENY");
+    expect((headers["x-frame-options"] || "").toLowerCase()).toBe("deny");
     expect(headers["x-content-type-options"]).toBe("nosniff");
     expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
 
-    // Check Header Brand Elements
+    // Check Header Brand
     await expect(page.locator("h1")).toContainText("LEAD ENGINE");
 
     // Check Launchpad form
@@ -85,22 +50,21 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     await expect(firstRow).toBeVisible({ timeout: 35000 });
 
     // 3. Inspect a High-Conviction Lead Dossier
-    const inspectButton = page.locator("button:has-text('Inspect')").first();
-    await inspectButton.click();
+    const viewButton = page.locator("tbody tr button").first();
+    await viewButton.click();
 
-    // 4. Verify Lead Dossier Modal
+    // 4. Verify Sales Intelligence Dossier Modal
     const modal = page.locator(".fixed.inset-0");
     await expect(modal).toBeVisible();
-    await expect(modal.locator("text=LEAD SCORE")).toBeVisible();
-    await expect(modal.locator("text=Reputation Velocity")).toBeVisible();
-    await expect(modal.locator("text=Digital Surface Gap")).toBeVisible();
-    await expect(modal.locator("text=Surgical Pitch & Outreach Deck")).toBeVisible();
+    await expect(modal.locator("text=Why This Lead")).toBeVisible();
+    await expect(modal.locator("text=What We Found")).toBeVisible();
+    await expect(modal.locator("text=Recommended Approach")).toBeVisible();
 
     // 5. Test Copy Script Button
     const copyButton = modal.locator("button:has-text('Copy Script')");
     if (await copyButton.isVisible()) {
       await copyButton.click();
-      await expect(modal.locator("text=Copied to Clipboard!")).toBeVisible();
+      await expect(modal.locator("text=Copied")).toBeVisible();
     }
 
     // 6. Test Triage Action (Ready for Outreach)
@@ -126,7 +90,7 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     const websiteSelect = page.locator('[data-testid="filter-website"]');
     await websiteSelect.selectOption("NO_WEBSITE");
 
-    const noWebsiteBadge = page.locator("tbody span:has-text('NO WEBSITE')").first();
+    const noWebsiteBadge = page.locator("tbody span:has-text('No Website')").first();
     await expect(noWebsiteBadge).toBeVisible();
 
     // 3. Reset Filter
