@@ -57,13 +57,58 @@ sqlite.exec(`
     opportunity_type TEXT NOT NULL DEFAULT 'UNKNOWN',
     dossier TEXT,
     human_status TEXT NOT NULL DEFAULT 'NEW',
+    first_observed_at TEXT,
+    last_observed_at TEXT,
+    observation_count INTEGER NOT NULL DEFAULT 1,
+    review_count_delta INTEGER DEFAULT 0,
+    rating_delta REAL DEFAULT 0,
+    identity_source TEXT DEFAULT 'deterministic',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS lead_observations (
+    id TEXT PRIMARY KEY,
+    lead_id TEXT REFERENCES leads(id) ON DELETE CASCADE,
+    scan_id TEXT REFERENCES discovery_scans(id) ON DELETE CASCADE,
+    observed_rating REAL NOT NULL,
+    observed_review_count INTEGER NOT NULL,
+    observed_website_url TEXT,
+    observed_phone TEXT,
+    observed_at TEXT NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_leads_ranking ON leads(total_lead_score, human_status);
   CREATE INDEX IF NOT EXISTS idx_leads_scan_id ON leads(scan_id);
   CREATE INDEX IF NOT EXISTS idx_leads_place_id ON leads(place_id);
+  CREATE INDEX IF NOT EXISTS idx_observations_lead ON lead_observations(lead_id);
 `);
+
+// Graceful schema migration helper for existing SQLite databases
+try {
+  const tableInfo = sqlite.prepare("PRAGMA table_info(leads)").all() as { name: string }[];
+  const existingColumns = new Set(tableInfo.map((c) => c.name));
+
+  if (!existingColumns.has("first_observed_at")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN first_observed_at TEXT;");
+  }
+  if (!existingColumns.has("last_observed_at")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN last_observed_at TEXT;");
+  }
+  if (!existingColumns.has("observation_count")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN observation_count INTEGER NOT NULL DEFAULT 1;");
+  }
+  if (!existingColumns.has("review_count_delta")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN review_count_delta INTEGER DEFAULT 0;");
+  }
+  if (!existingColumns.has("rating_delta")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN rating_delta REAL DEFAULT 0;");
+  }
+  if (!existingColumns.has("identity_source")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN identity_source TEXT DEFAULT 'deterministic';");
+  }
+} catch {
+  // Pragma migration handled
+}
 
 export const db = drizzleSqlite(sqlite, { schema });

@@ -1,6 +1,7 @@
 import { chromium } from "playwright";
 import { RawBusinessInput, RawReviewTimestamp } from "@/features/qualification/UniversalFilterService";
 import { IDiscoveryAdapter, DiscoveryParams } from "./types";
+import { BusinessIdentityResolver } from "@/features/identity/BusinessIdentityResolver";
 
 export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
   public readonly name = "LiveGoogleMapsAdapter";
@@ -139,7 +140,12 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
       }, maxResults);
 
       for (const item of rawPlaces) {
-        const placeId = `gmaps_${Buffer.from(item.name).toString("hex").substring(0, 16)}_${Date.now().toString(36)}`;
+        const placeId = BusinessIdentityResolver.resolveId({
+          name: item.name,
+          formattedAddress: item.address || location,
+          phone: item.phone,
+          googleMapsUrl: item.href,
+        });
 
         results.push({
           placeId,

@@ -25,6 +25,13 @@ export interface AuditTelemetry {
   findings: AuditFinding[];
 }
 
+export interface SignalProvenance {
+  ratingConfidence: "high" | "medium" | "low";
+  reviewVelocityConfidence: "observed" | "longitudinal" | "unknown";
+  identityConfidence: "google_verified" | "deterministic";
+  auditConfidence: "empirical" | "pending";
+}
+
 export interface BusinessDossier {
   reputationScore: number;
   digitalGapScore: number;
@@ -34,6 +41,7 @@ export interface BusinessDossier {
   opportunityType: OpportunityType;
   identifiedStrengths: string[];
   identifiedBottlenecks: string[];
+  provenance?: SignalProvenance;
   recommendedPitch: {
     coreAngle: string;
     suggestedScope: string;
@@ -86,11 +94,31 @@ export const leads = sqliteTable("leads", {
   opportunityType: sqliteText("opportunity_type").$type<OpportunityType>().notNull().default("UNKNOWN"),
   dossier: sqliteText("dossier", { mode: "json" }).$type<BusinessDossier>(),
   humanStatus: sqliteText("human_status").$type<HumanStatus>().notNull().default("NEW"),
+  // Observation and Longitudinal Intelligence
+  firstObservedAt: sqliteText("first_observed_at"),
+  lastObservedAt: sqliteText("last_observed_at"),
+  observationCount: sqliteInteger("observation_count").notNull().default(1),
+  reviewCountDelta: sqliteInteger("review_count_delta").default(0),
+  ratingDelta: sqliteReal("rating_delta").default(0),
+  identitySource: sqliteText("identity_source").default("deterministic"),
   createdAt: sqliteText("created_at").notNull(),
   updatedAt: sqliteText("updated_at").notNull(),
+});
+
+export const leadObservations = sqliteTable("lead_observations", {
+  id: sqliteText("id").primaryKey(),
+  leadId: sqliteText("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+  scanId: sqliteText("scan_id").references(() => discoveryScans.id, { onDelete: "cascade" }),
+  observedRating: sqliteReal("observed_rating").notNull(),
+  observedReviewCount: sqliteInteger("observed_review_count").notNull(),
+  observedWebsiteUrl: sqliteText("observed_website_url"),
+  observedPhone: sqliteText("observed_phone"),
+  observedAt: sqliteText("observed_at").notNull(),
 });
 
 export type DiscoveryScan = typeof discoveryScans.$inferSelect;
 export type InsertDiscoveryScan = typeof discoveryScans.$inferInsert;
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
+export type LeadObservation = typeof leadObservations.$inferSelect;
+export type InsertLeadObservation = typeof leadObservations.$inferInsert;

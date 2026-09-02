@@ -265,11 +265,26 @@ export function LeadMatrixTable({
                           )}
                         </div>
 
-                        <div className="flex items-center gap-3.5 text-slate-400 text-[11px] mt-1.5">
+                        <div className="flex items-center gap-3.5 text-slate-400 text-[11px] mt-1.5 flex-wrap">
                           <span className="flex items-center gap-1">
                             <span className="text-amber-400 font-bold">★ {lead.rating.toFixed(1)}</span>
                             <span className="text-slate-500 font-mono">({lead.reviewCount} reviews)</span>
                           </span>
+
+                          {/* Longitudinal Multi-Scan Growth Delta */}
+                          {(lead.reviewCountDelta ?? 0) > 0 && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[9px] font-mono font-bold">
+                              +{lead.reviewCountDelta} reviews
+                            </span>
+                          )}
+
+                          {/* Multi-Scan Observation Count */}
+                          {(lead.observationCount ?? 1) > 1 && (
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 text-[9px] font-mono font-bold">
+                              Observed {lead.observationCount}x
+                            </span>
+                          )}
+
                           {lead.formattedAddress && (
                             <span className="flex items-center gap-1 truncate max-w-[220px] text-slate-500">
                               <MapPin className="w-3.5 h-3.5 shrink-0 text-slate-600" />

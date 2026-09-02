@@ -1,4 +1,4 @@
-import { BusinessDossier, AuditTelemetry, ReviewTrend } from "@/core/db/schema";
+import { BusinessDossier, AuditTelemetry, ReviewTrend, SignalProvenance } from "@/core/db/schema";
 import { OpportunityClassifier } from "@/features/qualification/OpportunityClassifier";
 import { ScoringEngine } from "@/features/qualification/ScoringEngine";
 
@@ -14,6 +14,7 @@ export interface SynthesizerParams {
   websiteUrl?: string | null;
   phone?: string | null;
   formattedAddress?: string | null;
+  googleMapsUrl?: string | null;
   auditTelemetry?: AuditTelemetry | null;
 }
 
@@ -41,7 +42,15 @@ export class DossierSynthesizer {
       opportunityType,
     });
 
-    // 1. Grounded Deterministic Rules Engine
+    // 1. Signal Provenance & Confidence Ledger
+    const provenance: SignalProvenance = {
+      ratingConfidence: "high",
+      reviewVelocityConfidence: params.reviewTrend !== "UNKNOWN" ? "observed" : "unknown",
+      identityConfidence: params.googleMapsUrl ? "google_verified" : "deterministic",
+      auditConfidence: params.auditTelemetry ? "empirical" : "pending",
+    };
+
+    // 2. Grounded Deterministic Rules Engine
     const identifiedStrengths = [
       `Established market reputation with ${params.rating}★ rating across ${params.reviewCount} verified Google reviews.`,
     ];
@@ -96,7 +105,7 @@ export class DossierSynthesizer {
 
     let executiveSummary = `${params.name} is a high-reputation ${params.category || "local business"} (${params.rating}★, ${params.reviewCount} reviews) with high customer trust but a substantial ${opportunityType.replace(/_/g, " ")} gap. Resolving these bottlenecks directly increases captured mobile bookings.`;
 
-    // 2. Optional OpenAI LLM Enhancement (if OPENAI_API_KEY is configured)
+    // 3. Optional OpenAI LLM Enhancement (if OPENAI_API_KEY is configured)
     if (apiKey && apiKey.trim().length > 0) {
       try {
         const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -152,6 +161,7 @@ Output a 2-sentence executive summary highlighting their exact commercial bottle
       opportunityType,
       identifiedStrengths,
       identifiedBottlenecks,
+      provenance,
       recommendedPitch: {
         coreAngle,
         suggestedScope,

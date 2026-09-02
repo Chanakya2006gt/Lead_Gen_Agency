@@ -1,5 +1,5 @@
 import { db } from "@/core/db";
-import { discoveryScans, leads } from "@/core/db/schema";
+import { discoveryScans, leads, leadObservations } from "@/core/db/schema";
 import { eq } from "drizzle-orm";
 import { IDiscoveryAdapter } from "@/features/discovery/types";
 import { GooglePlacesApiAdapter } from "@/features/discovery/GooglePlacesApiAdapter";
@@ -11,6 +11,7 @@ import { OutscraperAdapter } from "@/features/discovery/OutscraperAdapter";
 import { UniversalFilterService } from "@/features/qualification/UniversalFilterService";
 import { PlaywrightAuditEngine } from "@/features/auditor/PlaywrightAuditEngine";
 import { DossierSynthesizer } from "@/features/synthesis/DossierSynthesizer";
+import { BusinessIdentityResolver } from "@/features/identity/BusinessIdentityResolver";
 import crypto from "crypto";
 
 export interface ScanOptions {
@@ -156,28 +157,50 @@ export class ScanPipelineService {
             if (abortController.signal.aborted) return;
 
             qualifiedCount++;
-            const leadId = crypto.randomUUID();
 
-            // Step C: Headless Audit or No-Website Fast Track
+            // Step C: Identity Resolution & Stable Entity Extraction
+            const placeId = business.placeId || BusinessIdentityResolver.resolveId({
+              name: business.name,
+              formattedAddress: business.formattedAddress,
+              phone: business.phone,
+              googleMapsUrl: business.googleMapsUrl,
+            });
+
+            let identitySource = "deterministic";
+            if (placeId.startsWith("gplace_") || placeId.startsWith("gfeat_") || placeId.startsWith("gcid_")) {
+              identitySource = "google_verified";
+            }
+
+            // Check if this business entity already exists in our database
+            const existingLead = db.select().from(leads).where(eq(leads.placeId, placeId)).get();
+
+            // Non-Destructive Field Resolution: preserve verified existing contact points if current scrape glitched
+            const effectiveWebsiteUrl = business.websiteUrl || existingLead?.websiteUrl || null;
+            const effectivePhone = business.phone || existingLead?.phone || null;
+            const effectiveAddress = business.formattedAddress || existingLead?.formattedAddress || null;
+            const effectiveMapsUrl = business.googleMapsUrl || existingLead?.googleMapsUrl || null;
+            const effectiveHasWebsite = Boolean(effectiveWebsiteUrl);
+
+            // Step D: Headless Dual-Viewport Audit or No-Website Fast Track
             let auditStatus: "PENDING" | "NO_WEBSITE" | "AUDITED" | "FAILED" = "PENDING";
             let auditTelemetry = null;
 
-            if (!filterResult.hasWebsite) {
+            if (!effectiveHasWebsite) {
               auditStatus = "NO_WEBSITE";
-            } else if (business.websiteUrl) {
+            } else if (effectiveWebsiteUrl) {
               try {
                 const allowLocalhost = options.source === "mock" || process.env.NODE_ENV === "test";
-                auditTelemetry = await auditEngine.auditUrl(business.websiteUrl, allowLocalhost);
+                auditTelemetry = await auditEngine.auditUrl(effectiveWebsiteUrl, allowLocalhost);
                 auditStatus = "AUDITED";
               } catch (auditErr) {
-                console.warn(`Audit failed for ${business.name} (${business.websiteUrl}):`, auditErr);
+                console.warn(`Audit failed for ${business.name} (${effectiveWebsiteUrl}):`, auditErr);
                 auditStatus = "FAILED";
               }
             }
 
             if (abortController.signal.aborted) return;
 
-            // Step D: Grounded Dossier Synthesis & 4D Scoring
+            // Step E: Grounded Dossier Synthesis & 4D Scoring with Signal Provenance
             const dossier = await DossierSynthesizer.synthesize(
               {
                 name: business.name,
@@ -187,10 +210,11 @@ export class ScanPipelineService {
                 reviewTrend: filterResult.reviewTrend,
                 reviewsLast30Days: filterResult.reviewsLast30Days,
                 reviewsLast90Days: filterResult.reviewsLast90Days,
-                hasWebsite: filterResult.hasWebsite,
-                websiteUrl: business.websiteUrl,
-                phone: business.phone,
-                formattedAddress: business.formattedAddress,
+                hasWebsite: effectiveHasWebsite,
+                websiteUrl: effectiveWebsiteUrl,
+                phone: effectivePhone,
+                formattedAddress: effectiveAddress,
+                googleMapsUrl: effectiveMapsUrl,
                 auditTelemetry,
               },
               process.env.OPENAI_API_KEY
@@ -198,38 +222,103 @@ export class ScanPipelineService {
 
             const now = new Date().toISOString();
 
-            // Step E: Persist Qualified Lead
-            db.insert(leads)
+            // Calculate Longitudinal Metrics across Scans
+            const reviewCountDelta = existingLead ? filterResult.reviewCount - existingLead.reviewCount : 0;
+            const ratingDelta = existingLead ? +(filterResult.rating - existingLead.rating).toFixed(1) : 0;
+            const observationCount = existingLead ? existingLead.observationCount + 1 : 1;
+            const firstObservedAt = existingLead?.firstObservedAt || existingLead?.createdAt || now;
+            const leadId = existingLead?.id || crypto.randomUUID();
+
+            // Step F: Non-Destructive Entity Persistence (Upsert)
+            if (existingLead) {
+              db.update(leads)
+                .set({
+                  scanId, // Associate with current active scan
+                  name: business.name,
+                  category: business.category || options.niche,
+                  formattedAddress: effectiveAddress,
+                  phone: effectivePhone,
+                  googleMapsUrl: effectiveMapsUrl,
+                  websiteUrl: effectiveWebsiteUrl,
+                  rating: filterResult.rating,
+                  reviewCount: filterResult.reviewCount,
+                  lastReviewDate: filterResult.lastReviewDate || existingLead.lastReviewDate,
+                  reviewsLast30Days: filterResult.reviewsLast30Days,
+                  reviewsLast90Days: filterResult.reviewsLast90Days,
+                  reviewsLast180Days: filterResult.reviewsLast180Days,
+                  reviewTrend: filterResult.reviewTrend,
+                  hasWebsite: effectiveHasWebsite,
+                  auditStatus: auditStatus === "PENDING" && existingLead.auditStatus === "AUDITED" ? existingLead.auditStatus : auditStatus,
+                  auditTelemetry: (auditTelemetry || existingLead.auditTelemetry) as any,
+                  reputationScore: dossier.reputationScore,
+                  digitalGapScore: dossier.digitalGapScore,
+                  opportunityScore: dossier.opportunityScore,
+                  confidenceScore: dossier.confidenceScore,
+                  totalLeadScore: dossier.overallLeadScore,
+                  opportunityType: dossier.opportunityType,
+                  dossier: dossier as any,
+                  lastObservedAt: now,
+                  observationCount,
+                  reviewCountDelta,
+                  ratingDelta,
+                  identitySource,
+                  updatedAt: now,
+                })
+                .where(eq(leads.id, existingLead.id))
+                .run();
+            } else {
+              db.insert(leads)
+                .values({
+                  id: leadId,
+                  scanId,
+                  placeId,
+                  name: business.name,
+                  category: business.category || options.niche,
+                  formattedAddress: effectiveAddress,
+                  phone: effectivePhone,
+                  googleMapsUrl: effectiveMapsUrl,
+                  websiteUrl: effectiveWebsiteUrl,
+                  rating: filterResult.rating,
+                  reviewCount: filterResult.reviewCount,
+                  lastReviewDate: filterResult.lastReviewDate || null,
+                  reviewsLast30Days: filterResult.reviewsLast30Days,
+                  reviewsLast90Days: filterResult.reviewsLast90Days,
+                  reviewsLast180Days: filterResult.reviewsLast180Days,
+                  reviewTrend: filterResult.reviewTrend,
+                  hasWebsite: effectiveHasWebsite,
+                  auditStatus,
+                  auditTelemetry: auditTelemetry as any,
+                  reputationScore: dossier.reputationScore,
+                  digitalGapScore: dossier.digitalGapScore,
+                  opportunityScore: dossier.opportunityScore,
+                  confidenceScore: dossier.confidenceScore,
+                  totalLeadScore: dossier.overallLeadScore,
+                  opportunityType: dossier.opportunityType,
+                  dossier: dossier as any,
+                  humanStatus: "NEW",
+                  firstObservedAt,
+                  lastObservedAt: now,
+                  observationCount: 1,
+                  reviewCountDelta: 0,
+                  ratingDelta: 0,
+                  identitySource,
+                  createdAt: now,
+                  updatedAt: now,
+                })
+                .run();
+            }
+
+            // Record point-in-time observation entry
+            db.insert(leadObservations)
               .values({
-                id: leadId,
+                id: crypto.randomUUID(),
+                leadId,
                 scanId,
-                placeId: business.placeId,
-                name: business.name,
-                category: business.category || options.niche,
-                formattedAddress: business.formattedAddress || null,
-                phone: business.phone || null,
-                googleMapsUrl: business.googleMapsUrl || null,
-                websiteUrl: business.websiteUrl || null,
-                rating: filterResult.rating,
-                reviewCount: filterResult.reviewCount,
-                lastReviewDate: filterResult.lastReviewDate || null,
-                reviewsLast30Days: filterResult.reviewsLast30Days,
-                reviewsLast90Days: filterResult.reviewsLast90Days,
-                reviewsLast180Days: filterResult.reviewsLast180Days,
-                reviewTrend: filterResult.reviewTrend,
-                hasWebsite: filterResult.hasWebsite,
-                auditStatus,
-                auditTelemetry: auditTelemetry as any,
-                reputationScore: dossier.reputationScore,
-                digitalGapScore: dossier.digitalGapScore,
-                opportunityScore: dossier.opportunityScore,
-                confidenceScore: dossier.confidenceScore,
-                totalLeadScore: dossier.overallLeadScore,
-                opportunityType: dossier.opportunityType,
-                dossier: dossier as any,
-                humanStatus: "NEW",
-                createdAt: now,
-                updatedAt: now,
+                observedRating: filterResult.rating,
+                observedReviewCount: filterResult.reviewCount,
+                observedWebsiteUrl: effectiveWebsiteUrl,
+                observedPhone: effectivePhone,
+                observedAt: now,
               })
               .run();
           })
