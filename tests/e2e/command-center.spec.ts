@@ -67,12 +67,9 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     const submitBtn = page.locator('[data-testid="btn-launch-discovery"]');
     await expect(submitBtn).toBeEnabled({ timeout: 15000 });
 
-    // Select Mock Engine for instant deterministic testing & Launch Discovery Scan
+    // Verify Discovery Engine selector is present
     const engineSelect = page.locator('[data-testid="select-engine"]');
-    if (await engineSelect.isVisible()) {
-      await engineSelect.selectOption("mock");
-    }
-
+    await expect(engineSelect).toBeVisible();
     await page.waitForTimeout(300);
 
     const [scanResponse] = await Promise.all([

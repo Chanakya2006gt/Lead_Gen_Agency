@@ -1,23 +1,22 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Lead, OpportunityType, ReviewTrend, HumanStatus } from "@/core/db/schema";
+import { Lead, HumanStatus } from "@/core/db/schema";
 import { ScoreGauge } from "./ScoreGauge";
 import {
   ExternalLink,
   Flame,
   Globe,
-  Phone,
   MapPin,
-  TrendingUp,
-  Clock,
-  ChevronRight,
-  Filter,
   Search,
-  CheckCircle2,
-  Lock,
   Zap,
+  Lock,
   Sparkles,
+  ChevronRight,
+  ShieldAlert,
+  Smartphone,
+  MessageCircle,
+  PhoneCall
 } from "lucide-react";
 
 interface LeadMatrixTableProps {
@@ -149,7 +148,7 @@ export function LeadMatrixTable({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter leads, niche, or address..."
+              placeholder="Filter verified leads, niche, or address..."
               className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-[#06080D] border border-white/[0.08] text-slate-100 text-xs focus:outline-none focus:border-indigo-500 transition font-medium shadow-inner"
             />
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
@@ -215,9 +214,9 @@ export function LeadMatrixTable({
             <div className="w-12 h-12 rounded-2xl bg-white/[0.03] border border-white/[0.08] flex items-center justify-center mx-auto mb-3 text-slate-500">
               <Sparkles className="w-6 h-6" />
             </div>
-            <p className="text-sm font-semibold text-slate-300">No qualified leads found matching active criteria.</p>
+            <p className="text-sm font-semibold text-slate-300">No qualified leads matching active filters.</p>
             <p className="text-xs text-slate-500 mt-1">
-              Launch a new market discovery scan or adjust your active filters.
+              Select an existing scan tab above or launch discovery on any city.
             </p>
           </div>
         ) : (
@@ -228,7 +227,7 @@ export function LeadMatrixTable({
                   <th className="py-4 px-6 text-center w-24">Lead Score</th>
                   <th className="py-4 px-6">Target Operating Business</th>
                   <th className="py-4 px-6">Reputation &amp; Recency</th>
-                  <th className="py-4 px-6">Digital Surface</th>
+                  <th className="py-4 px-6">Digital Surface Evidence</th>
                   <th className="py-4 px-6">Opportunity Tier</th>
                   <th className="py-4 px-6 text-center">Triage Stage</th>
                   <th className="py-4 px-6 text-right">Dossier</th>
@@ -238,6 +237,7 @@ export function LeadMatrixTable({
                 {filteredLeads.map((lead) => {
                   const isSelected = selectedLeadId === lead.id;
                   const isNoWebsite = !lead.hasWebsite;
+                  const telemetry = (lead.auditTelemetry as any) || null;
 
                   return (
                     <tr
@@ -291,21 +291,49 @@ export function LeadMatrixTable({
                         </div>
                       </td>
 
-                      {/* Digital Surface */}
+                      {/* Digital Surface Evidence */}
                       <td className="py-4 px-6">
                         {lead.hasWebsite && lead.websiteUrl ? (
-                          <div className="flex items-center gap-2 text-slate-300">
-                            <Globe className="w-3.5 h-3.5 text-slate-500" />
-                            <a
-                              href={lead.websiteUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="hover:text-indigo-400 underline underline-offset-2 truncate max-w-[160px] text-xs font-mono"
-                            >
-                              {lead.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                            </a>
-                            <ExternalLink className="w-3 h-3 text-slate-500 hover:text-slate-300" />
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5 text-slate-300">
+                              <Globe className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                              <a
+                                href={lead.websiteUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="hover:text-indigo-400 underline underline-offset-2 truncate max-w-[160px] text-xs font-mono"
+                              >
+                                {lead.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                              </a>
+                              <ExternalLink className="w-3 h-3 text-slate-500 hover:text-slate-300 shrink-0" />
+                            </div>
+
+                            {/* Measured Telemetry Badges */}
+                            {telemetry && (
+                              <div className="flex flex-wrap gap-1 text-[9px] font-mono">
+                                {!telemetry.viewportMetaPresent && (
+                                  <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 flex items-center gap-0.5">
+                                    <Smartphone className="w-2.5 h-2.5" /> Desktop Only
+                                  </span>
+                                )}
+                                {!telemetry.hasSsl && (
+                                  <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30 flex items-center gap-0.5">
+                                    <ShieldAlert className="w-2.5 h-2.5" /> No SSL
+                                  </span>
+                                )}
+                                {telemetry.hasWhatsAppIntegration && (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center gap-0.5">
+                                    <MessageCircle className="w-2.5 h-2.5" /> WhatsApp
+                                  </span>
+                                )}
+                                {telemetry.hasDirectClickToCall && (
+                                  <span className="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 flex items-center gap-0.5">
+                                    <PhoneCall className="w-2.5 h-2.5" /> Tel CTA
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <span className="text-amber-400 font-mono text-[11px] font-bold flex items-center gap-1.5">

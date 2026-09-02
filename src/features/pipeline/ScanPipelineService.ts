@@ -86,7 +86,7 @@ export class ScanPipelineService {
       adapter = new ApifyMapsAdapter();
     } else if (options.source === "outscraper") {
       adapter = new OutscraperAdapter();
-    } else if (options.source === "mock") {
+    } else if (options.source === "mock" && (process.env.NODE_ENV === "test" || process.env.PLAYWRIGHT_TEST === "1")) {
       adapter = new MockDiscoveryAdapter();
     } else {
       if (process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY) {

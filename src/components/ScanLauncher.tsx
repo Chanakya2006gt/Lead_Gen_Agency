@@ -434,7 +434,6 @@ export function ScanLauncher({ onScanLaunched, onCancelScan, isLoading, activeSc
               <option value="serpapi">SerpAPI (Google Maps API)</option>
               <option value="apify">Apify Actor API</option>
               <option value="outscraper">Outscraper API</option>
-              <option value="mock">Simulated (Zero Cost)</option>
             </select>
           </div>
 
