@@ -1,7 +1,7 @@
 import { sqliteTable, text as sqliteText, integer as sqliteInteger, real as sqliteReal } from "drizzle-orm/sqlite-core";
 
 export type ReviewTrend = "GROWING" | "STABLE" | "DECLINING" | "STALE" | "UNKNOWN";
-export type OpportunityType = "WEBSITE" | "WEBSITE_AUTOMATION" | "CUSTOM_OPERATIONAL_SOFTWARE" | "UNKNOWN";
+export type OpportunityType = "WEBSITE" | "WEBSITE_AUTOMATION" | "CUSTOM_OPERATIONAL_SOFTWARE" | "DISCONNECTED_GBP_WEBSITE" | "UNKNOWN";
 export type HumanStatus = "NEW" | "REVIEWED" | "READY_FOR_OUTREACH" | "ARCHIVED";
 
 export interface AuditFinding {
@@ -39,6 +39,8 @@ export interface BusinessDossier {
   confidenceScore: number;
   overallLeadScore: number;
   opportunityType: OpportunityType;
+  isGbpDisconnected?: boolean;
+  unlinkedWebsiteUrl?: string | null;
   identifiedStrengths: string[];
   identifiedBottlenecks: string[];
   provenance?: SignalProvenance;
@@ -86,6 +88,8 @@ export const leads = sqliteTable("leads", {
   reviewsLast180Days: sqliteInteger("reviews_last_180_days"),
   reviewTrend: sqliteText("review_trend").$type<ReviewTrend>().notNull().default("UNKNOWN"),
   hasWebsite: sqliteInteger("has_website", { mode: "boolean" }).notNull().default(false),
+  isGbpDisconnected: sqliteInteger("is_gbp_disconnected", { mode: "boolean" }).notNull().default(false),
+  unlinkedWebsiteUrl: sqliteText("unlinked_website_url"),
   auditStatus: sqliteText("audit_status").notNull().default("PENDING"),
   auditTelemetry: sqliteText("audit_telemetry", { mode: "json" }).$type<AuditTelemetry>(),
   reputationScore: sqliteInteger("reputation_score").default(0),
@@ -109,7 +113,7 @@ export const leads = sqliteTable("leads", {
 
 export const leadObservations = sqliteTable("lead_observations", {
   id: sqliteText("id").primaryKey(),
-  leadId: sqliteText("lead_id").references(() => leads.id, { onDelete: "cascade" }),
+  leadId: sqliteText("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
   scanId: sqliteText("scan_id").references(() => discoveryScans.id, { onDelete: "set null" }),
   observedRating: sqliteReal("observed_rating").notNull(),
   observedReviewCount: sqliteInteger("observed_review_count").notNull(),

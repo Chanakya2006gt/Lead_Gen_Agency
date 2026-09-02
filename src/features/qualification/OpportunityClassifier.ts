@@ -2,6 +2,7 @@ import { AuditTelemetry, OpportunityType } from "@/core/db/schema";
 
 export interface ClassifierInputs {
   hasWebsite: boolean;
+  isGbpDisconnected?: boolean;
   reviewCount: number;
   rating: number;
   auditTelemetry?: AuditTelemetry | null;
@@ -10,7 +11,12 @@ export interface ClassifierInputs {
 
 export class OpportunityClassifier {
   public static classify(inputs: ClassifierInputs): OpportunityType {
-    const { hasWebsite, reviewCount, auditTelemetry } = inputs;
+    const { hasWebsite, isGbpDisconnected, reviewCount, auditTelemetry } = inputs;
+
+    // Rule 0: Disconnected Official Website -> Google Business Profile Reconnection Opportunity
+    if (isGbpDisconnected) {
+      return "DISCONNECTED_GBP_WEBSITE";
+    }
 
     // Rule 1: No Website -> Instant Website Opportunity
     if (!hasWebsite || !auditTelemetry) {

@@ -12,7 +12,8 @@ import {
   ShieldAlert,
   Smartphone,
   MessageCircle,
-  PhoneCall
+  PhoneCall,
+  Unlink
 } from "lucide-react";
 
 interface LeadMatrixTableProps {
@@ -47,7 +48,8 @@ export function LeadMatrixTable({
           return false;
         }
 
-        if (websiteFilter === "NO_WEBSITE" && lead.hasWebsite) return false;
+        if (websiteFilter === "NO_WEBSITE" && (lead.hasWebsite || lead.isGbpDisconnected)) return false;
+        if (websiteFilter === "UNLINKED_SITE" && !lead.isGbpDisconnected) return false;
         if (websiteFilter === "HAS_WEBSITE" && !lead.hasWebsite) return false;
 
         return true;
@@ -61,6 +63,8 @@ export function LeadMatrixTable({
 
   const getOpportunityLabel = (type: string) => {
     switch (type) {
+      case "DISCONNECTED_GBP_WEBSITE":
+        return "Unlinked GBP Site";
       case "WEBSITE":
         return "Website Gap";
       case "WEBSITE_AUTOMATION":
@@ -97,6 +101,7 @@ export function LeadMatrixTable({
             className="px-2.5 py-1.5 rounded-lg bg-[#07090E] border border-white/[0.08] text-slate-300 text-xs focus:outline-none focus:border-indigo-500 cursor-pointer"
           >
             <option value="ALL">All Opportunities</option>
+            <option value="DISCONNECTED_GBP_WEBSITE">Unlinked GBP Site</option>
             <option value="WEBSITE">Website Gap</option>
             <option value="WEBSITE_AUTOMATION">Website + Booking</option>
             <option value="CUSTOM_OPERATIONAL_SOFTWARE">Custom Ops Software</option>
@@ -110,7 +115,8 @@ export function LeadMatrixTable({
           >
             <option value="ALL">All Websites</option>
             <option value="NO_WEBSITE">No Website (High Priority)</option>
-            <option value="HAS_WEBSITE">Has Website</option>
+            <option value="UNLINKED_SITE">Unlinked GBP Site</option>
+            <option value="HAS_WEBSITE">Connected Website</option>
           </select>
 
           <select
@@ -151,8 +157,8 @@ export function LeadMatrixTable({
             <tbody className="divide-y divide-white/[0.04]">
               {filteredLeads.map((lead) => {
                 const isSelected = selectedLeadId === lead.id;
-                const isNoWebsite = !lead.hasWebsite;
-                const isHighPriority = isNoWebsite || (lead.totalLeadScore ?? 0) >= 80;
+                const isNoWebsite = !lead.hasWebsite && !lead.isGbpDisconnected;
+                const isUnlinkedSite = lead.isGbpDisconnected;
                 const telemetry = (lead.auditTelemetry as any) || null;
 
                 return (
@@ -174,11 +180,15 @@ export function LeadMatrixTable({
                         <span className="font-semibold text-slate-100 text-sm hover:text-indigo-300 transition">
                           {lead.name}
                         </span>
-                        {isNoWebsite && (
+                        {isUnlinkedSite ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                            <Unlink className="w-2.5 h-2.5" /> Unlinked Site
+                          </span>
+                        ) : isNoWebsite ? (
                           <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
                             No Website
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       <div className="flex items-center gap-2 text-slate-400 text-xs mt-1">
@@ -207,7 +217,26 @@ export function LeadMatrixTable({
 
                     {/* Digital Presence */}
                     <td className="py-3.5 px-4">
-                      {lead.hasWebsite && lead.websiteUrl ? (
+                      {lead.isGbpDisconnected && lead.unlinkedWebsiteUrl ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 text-purple-300">
+                            <a
+                              href={lead.unlinkedWebsiteUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="hover:text-purple-200 underline underline-offset-2 truncate max-w-[160px] text-xs font-mono"
+                              title="Unlinked site discovered via secondary entity proof"
+                            >
+                              {lead.unlinkedWebsiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+                            </a>
+                            <ExternalLink className="w-3 h-3 text-purple-400" />
+                          </div>
+                          <span className="text-[10px] text-purple-400/80 font-medium block">
+                            ⚠ Missing on Google Maps
+                          </span>
+                        </div>
+                      ) : lead.hasWebsite && lead.websiteUrl ? (
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 text-slate-300">
                             <a
@@ -215,7 +244,7 @@ export function LeadMatrixTable({
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
-                              className="hover:text-indigo-400 underline underline-offset-2 truncate max-w-[160px] text-xs"
+                              className="hover:text-indigo-400 underline underline-offset-2 truncate max-w-[160px] text-xs font-mono"
                             >
                               {lead.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}
                             </a>

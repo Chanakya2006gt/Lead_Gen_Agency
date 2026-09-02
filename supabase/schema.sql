@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS leads (
 
   -- Audit & Opportunity Engine
   has_website BOOLEAN NOT NULL DEFAULT FALSE,
+  is_gbp_disconnected BOOLEAN NOT NULL DEFAULT FALSE,
+  unlinked_website_url TEXT,
   audit_status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
   audit_telemetry JSONB,
 

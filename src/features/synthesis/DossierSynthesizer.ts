@@ -11,6 +11,8 @@ export interface SynthesizerParams {
   reviewsLast30Days?: number | null;
   reviewsLast90Days?: number | null;
   hasWebsite: boolean;
+  isGbpDisconnected?: boolean;
+  unlinkedWebsiteUrl?: string | null;
   websiteUrl?: string | null;
   phone?: string | null;
   formattedAddress?: string | null;
@@ -25,6 +27,7 @@ export class DossierSynthesizer {
   ): Promise<BusinessDossier> {
     const opportunityType = OpportunityClassifier.classify({
       hasWebsite: params.hasWebsite,
+      isGbpDisconnected: params.isGbpDisconnected,
       reviewCount: params.reviewCount,
       rating: params.rating,
       auditTelemetry: params.auditTelemetry,
@@ -37,7 +40,7 @@ export class DossierSynthesizer {
       reviewTrend: params.reviewTrend,
       reviewsLast30Days: params.reviewsLast30Days,
       reviewsLast90Days: params.reviewsLast90Days,
-      hasWebsite: params.hasWebsite,
+      hasWebsite: params.hasWebsite || Boolean(params.isGbpDisconnected),
       auditTelemetry: params.auditTelemetry,
       opportunityType,
     });
@@ -63,7 +66,18 @@ export class DossierSynthesizer {
 
     const identifiedBottlenecks: string[] = [];
 
-    if (!params.hasWebsite) {
+    if (params.isGbpDisconnected) {
+      const domainDisplay = params.unlinkedWebsiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "official domain";
+      identifiedBottlenecks.push(
+        `Disconnected Google Business Profile: Official website (${domainDisplay}) exists but is missing from Google Maps profile.`
+      );
+      identifiedBottlenecks.push(
+        "Local Search Ranking Penalty: Missing website link suppresses Google Maps 3-pack local search visibility."
+      );
+      identifiedBottlenecks.push(
+        "Mobile Conversion Drop: High-intent searchers viewing Google Maps profile cannot access full service details or book online."
+      );
+    } else if (!params.hasWebsite) {
       identifiedBottlenecks.push(
         "Zero official website presence on Google Business Profile, forfeiting high-intent mobile searchers to competitors."
       );
@@ -89,7 +103,12 @@ export class DossierSynthesizer {
     let suggestedScope = "";
     let estimatedValueRange = "";
 
-    if (opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE") {
+    if (opportunityType === "DISCONNECTED_GBP_WEBSITE") {
+      const domainDisplay = params.unlinkedWebsiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "official domain";
+      coreAngle = `Reconnecting your active website (${domainDisplay}) to your Google Maps profile to recover lost local search traffic.`;
+      suggestedScope = `Google Business Profile synchronization, Local Business Schema markup integration, mobile conversion review, and Maps 3-pack ranking recovery.`;
+      estimatedValueRange = "$1,500 – $3,500 (or ₹25,000 – ₹50,000)";
+    } else if (opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE") {
       coreAngle = `Automating client scheduling, WhatsApp intake, and internal service management for ${params.name}.`;
       suggestedScope = `Custom automated intake portal, 24/7 calendar booking sync, multi-staff calendar management, and SMS/WhatsApp appointment reminders.`;
       estimatedValueRange = "$6,500 – $14,000 (Target Scope Benchmark)";
@@ -129,8 +148,8 @@ export class DossierSynthesizer {
 Category: ${params.category}
 Rating: ${params.rating}★ (${params.reviewCount} reviews)
 Has Website: ${params.hasWebsite}
-Audit Bottlenecks: ${identifiedBottlenecks.join("; ")}
 Opportunity Tier: ${opportunityType}
+Audit Bottlenecks: ${identifiedBottlenecks.join("; ")}
 
 Output a 2-sentence executive summary highlighting their exact commercial bottleneck and how fixing it unlocks revenue.`,
               },
@@ -159,6 +178,8 @@ Output a 2-sentence executive summary highlighting their exact commercial bottle
       confidenceScore: scores.confidenceScore,
       overallLeadScore: scores.overallLeadScore,
       opportunityType,
+      isGbpDisconnected: params.isGbpDisconnected,
+      unlinkedWebsiteUrl: params.unlinkedWebsiteUrl,
       identifiedStrengths,
       identifiedBottlenecks,
       provenance,

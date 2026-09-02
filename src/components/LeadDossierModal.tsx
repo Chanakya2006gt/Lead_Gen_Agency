@@ -18,7 +18,8 @@ import {
   Send,
   CheckCircle2,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  Unlink
 } from "lucide-react";
 
 interface LeadDossierModalProps {
@@ -36,18 +37,22 @@ export function LeadDossierModal({ lead, onClose, onStatusChange }: LeadDossierM
 
   const dossier: BusinessDossier | null = (lead.dossier as any) || null;
   const telemetry = (lead.auditTelemetry as any) || null;
-  const findings: AuditFinding[] = telemetry?.findings || [];
   const pitch = dossier?.recommendedPitch;
 
   const founderName = process.env.NEXT_PUBLIC_AGENCY_FOUNDER_NAME || "Chanakya";
   const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME || "Agency Operations";
 
   const cleanPhone = lead.phone ? lead.phone.replace(/[^0-9+]/g, "") : "";
+  const displayDomain = (lead.unlinkedWebsiteUrl || lead.websiteUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
 
   // Dynamic Synthesis for "WHY THIS LEAD"
   const whyPoints: string[] = [];
-  if (!lead.hasWebsite) {
+  if (lead.isGbpDisconnected && lead.unlinkedWebsiteUrl) {
+    whyPoints.push(`Official website (${displayDomain}) exists online but is missing from Google Maps profile, suppressing 3-pack local search rankings.`);
+    whyPoints.push("High-intent mobile searchers looking up your Google Maps profile cannot access treatments or book online.");
+  } else if (!lead.hasWebsite) {
     whyPoints.push("Zero official website linked on Google Maps—leaking high-intent mobile searchers to competitors.");
+    whyPoints.push("Lacks direct digital intake, forcing all potential clients to call during business hours only.");
   } else {
     if (telemetry && !telemetry.viewportMetaPresent) {
       whyPoints.push("Mobile layout is desktop-only and unoptimized for touch smartphone users.");
@@ -62,11 +67,34 @@ export function LeadDossierModal({ lead, onClose, onStatusChange }: LeadDossierM
 
   whyPoints.push(`Strong established reputation: ${lead.rating.toFixed(1)}★ rating across ${lead.reviewCount} verified reviews demonstrates high customer demand and purchasing power.`);
   if (lead.reviewTrend === "GROWING" || (lead.reviewCountDelta ?? 0) > 0) {
-    whyPoints.push(`Active customer momentum (+${lead.reviewCountDelta ?? 0} reviews recently)—business is actively growing.`);
+    whyPoints.push(`Active customer momentum (+${lead.reviewCountDelta ?? 0} reviews recently)—business is actively expanding.`);
   }
 
   // Cold Email Copy
-  const coldEmailCopy = `Subject: Quick question regarding ${lead.name}'s mobile booking flow
+  let coldEmailCopy = "";
+  if (lead.isGbpDisconnected && lead.unlinkedWebsiteUrl) {
+    coldEmailCopy = `Subject: Quick note regarding ${lead.name}'s Google Maps listing & ${displayDomain}
+
+Hi ${lead.name} team,
+
+I was looking at top-rated ${lead.category || "practices"} in ${lead.formattedAddress || "your area"} and noticed your outstanding ${lead.rating}★ rating (${lead.reviewCount} Google reviews).
+
+I noticed you already have an active website at ${displayDomain}, but your Google Maps listing is currently not linked to it.
+
+Because of this:
+• Google suppresses your local Maps 3-pack search ranking.
+• Patients looking up your Maps profile on mobile cannot view your full treatments or book online.
+
+We help high-reputation local businesses sync their Google Business Profile assets and recover lost local search traffic. Our proposed scope for ${lead.name} is:
+${pitch?.suggestedScope || "Google Business Profile synchronization, Local Business Schema integration, and mobile conversion linkage."}
+
+Would you be open to a 2-minute video breakdown showing how to fix this linkage?
+
+Best regards,
+${founderName}
+${agencyName}`;
+  } else {
+    coldEmailCopy = `Subject: Quick question regarding ${lead.name}'s mobile booking flow
 
 Hi ${lead.name} team,
 
@@ -86,9 +114,20 @@ Would you be open to a 5-minute teardown video showing how to fix this?
 Best regards,
 ${founderName}
 ${agencyName}`;
+  }
 
   // WhatsApp Hook
-  const whatsAppCopy = `Hey ${lead.name} team! 👋 Saw your impressive ${lead.rating}★ rating on Google (${lead.reviewCount} reviews). 
+  let whatsAppCopy = "";
+  if (lead.isGbpDisconnected && lead.unlinkedWebsiteUrl) {
+    whatsAppCopy = `Hey ${lead.name} team! 👋 Saw your impressive ${lead.rating}★ rating on Google Maps (${lead.reviewCount} reviews).
+
+Quick observation: You have an active website at ${displayDomain}, but it isn't linked to your Google Maps profile, so mobile searchers can't tap into your site and your local search ranking is suppressed.
+
+Would you like me to send a 2-minute video showing how to fix the Google Business Profile linkage and capture more online appointments?
+
+— ${founderName} (${agencyName})`;
+  } else {
+    whatsAppCopy = `Hey ${lead.name} team! 👋 Saw your impressive ${lead.rating}★ rating on Google (${lead.reviewCount} reviews). 
 
 ${lead.hasWebsite 
   ? `Quick note: I audited your site and noticed ${pitch?.identifiedBottlenecks?.[0]?.toLowerCase() || "mobile booking is currently missing"}.`
@@ -97,23 +136,34 @@ ${lead.hasWebsite
 We help local businesses set up automated ${pitch?.coreAngle || "digital storefronts and booking funnels"}. Would you like me to send a 2-minute video breakdown of how to capture more online bookings?
 
 — ${founderName} (${agencyName})`;
+  }
 
   // Phone Gatekeeper Script
-  const phoneScriptCopy = `[FRONT DESK GATEKEEPER SCRIPT]
+  let phoneScriptCopy = "";
+  if (lead.isGbpDisconnected && lead.unlinkedWebsiteUrl) {
+    phoneScriptCopy = `[FRONT DESK GATEKEEPER SCRIPT - UNLINKED ASSET]
+Operator: "Hi, I was looking up ${lead.name} on Google Maps—congratulations on the ${lead.rating}★ rating with ${lead.reviewCount} reviews! 
+
+I noticed a quick technical issue where your active website at ${displayDomain} is currently disconnected from your Google Maps profile, which is hurting your Google search ranking. 
+
+Who is the practice manager or owner responsible for your digital operations so I can send over a quick 2-minute screenshot breakdown for them?"`;
+  } else {
+    phoneScriptCopy = `[FRONT DESK GATEKEEPER SCRIPT]
 Operator: "Hi, I was looking up ${lead.name} on Google Maps—congratulations on the ${lead.rating}★ rating with ${lead.reviewCount} reviews! 
 
 I noticed a technical issue with your online booking and mobile setup where patients/clients might have trouble scheduling directly from their phones. 
 
 Who is the practice manager or owner responsible for your digital operations so I can send over a quick 2-minute screenshot breakdown for them?"`;
+  }
 
   // Technical Scope
   const scopeCopy = `[PROPOSED TECHNICAL SCOPE & DELIVERABLES]
 Project: ${lead.name} — ${pitch?.coreAngle || "Digital Architecture"}
-Target Scope Benchmark: ${pitch?.estimatedValueRange || "$2,500 – $7,500"}
+Target Scope Benchmark: ${pitch?.estimatedValueRange || "$1,500 – $5,000"}
 
 Deliverables:
 • ${pitch?.suggestedScope || "Full responsive rebuild & conversion engine"}
-• Technical SEO Schema & Google Maps Synchronization
+• Technical Local Business Schema & Google Maps Synchronization
 • Mobile-First Speed Optimization (<1.5s TTFB)
 • Direct Click-to-Call & WhatsApp Intake Funnel
 • Interactive Booking / Calendar Integration`;
@@ -159,7 +209,11 @@ Deliverables:
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-lg font-bold text-white tracking-tight">{lead.name}</h2>
-              {!lead.hasWebsite ? (
+              {lead.isGbpDisconnected ? (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                  <Unlink className="w-3 h-3" /> Unlinked Site ({displayDomain})
+                </span>
+              ) : !lead.hasWebsite ? (
                 <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   No Website
                 </span>
@@ -171,7 +225,7 @@ Deliverables:
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs text-indigo-300 hover:text-indigo-200 border border-white/[0.08] bg-white/[0.03]"
                 >
                   <Globe className="w-3 h-3" />
-                  <span>{lead.websiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
+                  <span>{displayDomain}</span>
                   <ExternalLink className="w-2.5 h-2.5" />
                 </a>
               )}
@@ -231,9 +285,13 @@ Deliverables:
               {/* Row: Website */}
               <div className="p-3 flex items-center justify-between">
                 <span className="font-medium text-slate-300">Website Presence</span>
-                {lead.hasWebsite ? (
+                {lead.isGbpDisconnected ? (
+                  <span className="text-purple-300 font-medium flex items-center gap-1">
+                    <Unlink className="w-3.5 h-3.5 text-purple-400" /> Disconnected Asset ({displayDomain})
+                  </span>
+                ) : lead.hasWebsite ? (
                   <span className="text-emerald-400 font-medium flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Active Website Linked
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Active Website Linked on Maps
                   </span>
                 ) : (
                   <span className="text-amber-400 font-semibold flex items-center gap-1">
@@ -335,12 +393,12 @@ Deliverables:
                 Recommended Approach &amp; Scope
               </h3>
               <span className="px-2.5 py-0.5 rounded text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Est. Value: {pitch?.estimatedValueRange || "$2,500 – $7,500"}
+                Est. Value: {pitch?.estimatedValueRange || "$1,500 – $5,000"}
               </span>
             </div>
 
             <p className="text-slate-300 leading-relaxed mb-3">
-              {pitch?.suggestedScope || "Build a responsive digital storefront with 24/7 calendar booking and direct WhatsApp customer intake."}
+              {pitch?.suggestedScope || "Synchronize Google Business Profile, implement Local Business Schema markup, and connect mobile booking funnel."}
             </p>
 
             {/* Outreach Script Tabs */}

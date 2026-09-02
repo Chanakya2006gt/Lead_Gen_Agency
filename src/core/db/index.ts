@@ -52,6 +52,8 @@ sqlite.exec(`
     reviews_last_180_days INTEGER,
     review_trend TEXT NOT NULL DEFAULT 'UNKNOWN',
     has_website INTEGER NOT NULL DEFAULT 0,
+    is_gbp_disconnected INTEGER NOT NULL DEFAULT 0,
+    unlinked_website_url TEXT,
     audit_status TEXT NOT NULL DEFAULT 'PENDING',
     audit_telemetry TEXT,
     reputation_score INTEGER DEFAULT 0,
@@ -119,6 +121,12 @@ try {
   }
   if (!existingColumns.has("identity_source")) {
     sqlite.exec("ALTER TABLE leads ADD COLUMN identity_source TEXT DEFAULT 'deterministic';");
+  }
+  if (!existingColumns.has("is_gbp_disconnected")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN is_gbp_disconnected INTEGER NOT NULL DEFAULT 0;");
+  }
+  if (!existingColumns.has("unlinked_website_url")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN unlinked_website_url TEXT;");
   }
 
   // Pre-Migration Deduplication: Find any existing duplicate place_id rows, merge observations, and delete duplicates
