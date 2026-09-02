@@ -90,14 +90,16 @@ export class ScoringEngine {
 
   /**
    * 4. Overall 4D Mathematical Synthesis
-   * S_total = (S_rep * 0.35) + (S_gap * 0.40) + (S_opp * 0.25)
+   * Normalized 4-Factor Weighted Model:
+   * S_total = (S_rep * 0.30) + (S_gap * 0.35) + (S_opp * 0.20) + (S_conf * 0.15)
+   * Weights strictly sum to 1.00 (100%)
    */
   public static computeScores(inputs: ScoringInputs): DetailedScores {
     const reputationScore = this.calculateReputationScore(inputs);
     const digitalGapScore = this.calculateDigitalGapScore(inputs);
     const opportunityScore = this.calculateOpportunityScore(inputs.opportunityType);
 
-    // Calculate Empirical DOM Confidence
+    // Calculate Empirical DOM Confidence (0-100)
     let confidenceScore = 100;
     if (inputs.hasWebsite && inputs.auditTelemetry) {
       const findings = inputs.auditTelemetry.findings || [];
@@ -108,8 +110,12 @@ export class ScoringEngine {
       }
     }
 
+    // 4D Mathematical Weighted Synthesis
     const overallLeadScore = Math.round(
-      reputationScore * 0.35 + digitalGapScore * 0.4 + opportunityScore * 0.25
+      reputationScore * 0.30 +
+      digitalGapScore * 0.35 +
+      opportunityScore * 0.20 +
+      confidenceScore * 0.15
     );
 
     return {

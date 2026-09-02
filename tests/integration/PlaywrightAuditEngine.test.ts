@@ -48,7 +48,7 @@ describe("PlaywrightAuditEngine Integration Test", () => {
 
   it("Enforces strict SSRF validation against cloud metadata endpoints", async () => {
     await expect(auditEngine.auditUrl("http://169.254.169.254/latest/meta-data")).rejects.toThrow(
-      /Forbidden private or metadata IP target/
+      /Forbidden.*(private|metadata)/i
     );
   });
 

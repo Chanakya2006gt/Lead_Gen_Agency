@@ -30,7 +30,11 @@ export class PlaywrightAuditEngine implements IAuditEngine {
   }
 
   /**
-   * SSRF Protection: Validates URL protocol, hostname, and resolves IP against private/metadata CIDRs.
+   * Enterprise SSRF Defense:
+   * 1. Protocol allowlisting (http/https only)
+   * 2. Hostname/IP normalization & anti-obfuscation (blocks decimal, hex, octal IP tricks)
+   * 3. Cloud metadata endpoint defense (AWS, GCP, Azure, DigitalOcean)
+   * 4. Multi-IP DNS lookup & comprehensive private IPv4/IPv6 CIDR filtering
    */
   public async validateUrlSecurity(targetUrl: string, allowLocalhostForTesting: boolean = false): Promise<string> {
     let parsed: URL;
@@ -43,22 +47,36 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       throw new Error(`Invalid target URL format: ${targetUrl}`);
     }
 
+    // 1. Strict Protocol Allowlist
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new Error(`Forbidden URL protocol: ${parsed.protocol}`);
+      throw new Error(`Forbidden URL protocol (SSRF Defense): ${parsed.protocol}`);
     }
 
     const hostname = parsed.hostname.toLowerCase();
 
-    // Check string-based cloud metadata names
-    if (
-      hostname === "metadata.google.internal" ||
-      hostname === "metadata.aws.internal" ||
-      hostname.endsWith(".internal")
-    ) {
-      throw new Error(`Forbidden cloud metadata hostname: ${hostname}`);
+    // 2. Anti-Obfuscation: Block decimal/octal/hex integer IP representations (e.g. 2130706433 or 0x7f000001)
+    if (/^0x[0-9a-f]+$/i.test(hostname) || /^\d+$/.test(hostname)) {
+      throw new Error(`Forbidden numeric/hex IP encoding: ${hostname}`);
     }
 
-    // Resolve DNS to verify IP addresses
+    // 3. Known Cloud Metadata Hostnames & Internal Domains
+    const restrictedHostnames = [
+      "metadata.google.internal",
+      "metadata.aws.internal",
+      "instance-data",
+      "169.254.169.254",
+      "metadata.azure.internal",
+    ];
+    if (
+      restrictedHostnames.includes(hostname) ||
+      hostname.endsWith(".internal") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".onion")
+    ) {
+      throw new Error(`Forbidden internal/cloud metadata hostname: ${hostname}`);
+    }
+
+    // 4. DNS Resolution & Multi-Address IP Verification
     let addresses: string[] = [];
     if (net.isIP(hostname)) {
       addresses = [hostname];
@@ -73,7 +91,7 @@ export class PlaywrightAuditEngine implements IAuditEngine {
 
     for (const ip of addresses) {
       if (this.isPrivateOrRestrictedIp(ip)) {
-        // Only allow 127.0.0.1 or localhost if explicitly testing locally
+        // Only allow 127.0.0.1 or localhost if explicitly testing in test environment
         if (allowLocalhostForTesting && (ip === "127.0.0.1" || ip === "::1" || hostname === "localhost")) {
           continue;
         }
@@ -85,36 +103,49 @@ export class PlaywrightAuditEngine implements IAuditEngine {
   }
 
   private isPrivateOrRestrictedIp(ip: string): boolean {
+    // Handle IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1 or ::ffff:10.0.0.1)
+    if (ip.startsWith("::ffff:")) {
+      const ipv4Part = ip.replace("::ffff:", "");
+      return this.isPrivateOrRestrictedIp(ipv4Part);
+    }
+
     if (net.isIPv4(ip)) {
       const parts = ip.split(".").map(Number);
-      if (parts[0] === 0) return true; // 0.0.0.0/8
+      if (parts[0] === 0) return true; // 0.0.0.0/8 Current network
       if (parts[0] === 127) return true; // 127.0.0.0/8 Loopback
       if (parts[0] === 10) return true; // 10.0.0.0/8 Private
       if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true; // 172.16.0.0/12 Private
       if (parts[0] === 192 && parts[1] === 168) return true; // 192.168.0.0/16 Private
-      if (parts[0] === 169 && parts[1] === 254) return true; // 169.254.0.0/16 Link-local / AWS / GCP Metadata
-      if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true; // Carrier-grade NAT
-      if (parts[0] >= 224) return true; // Multicast & reserved
+      if (parts[0] === 169 && parts[1] === 254) return true; // 169.254.0.0/16 Link-local / AWS & GCP Metadata
+      if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true; // Carrier-grade NAT (100.64.0.0/10)
+      if (parts[0] === 198 && (parts[1] === 18 || parts[1] === 19)) return true; // Benchmark testing (198.18.0.0/15)
+      if (parts[0] >= 224) return true; // 224.0.0.0/4 Multicast & reserved
       return false;
     }
 
     if (net.isIPv6(ip)) {
       const normalized = ip.toLowerCase();
-      if (normalized === "::1" || normalized === "::") return true;
-      if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // Unique local
-      if (normalized.startsWith("fe80")) return true; // Link-local
+      if (normalized === "::1" || normalized === "::") return true; // Loopback & unspecified
+      if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true; // Unique local (fc00::/7)
+      if (normalized.startsWith("fe80") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) return true; // Link-local (fe80::/10)
+      if (normalized.startsWith("ff")) return true; // Multicast (ff00::/8)
       return false;
     }
 
     return true;
   }
 
+  /**
+   * Dual-Viewport Headless Audit:
+   * Phase 1: Mobile Viewport (375x812, touch, responsive tag, overflow, tel/WhatsApp anchors)
+   * Phase 2: Desktop Viewport (1440x900, layout stability, console crashes, booking funnels, broken links)
+   */
   public async auditUrl(rawUrl: string, allowLocalhostForTesting: boolean = false): Promise<AuditTelemetry> {
     const targetUrl = await this.validateUrlSecurity(rawUrl, allowLocalhostForTesting);
     const browser = await this.getBrowser();
 
     const findings: AuditFinding[] = [];
-    let hasSsl = targetUrl.startsWith("https://");
+    const hasSsl = targetUrl.startsWith("https://");
     let brokenLinksCount = 0;
     let jsConsoleErrorsCount = 0;
     let initialLoadLatencyMs = 0;
@@ -123,13 +154,15 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       findings.push({
         category: "technical",
         finding: "Insecure HTTP Protocol",
-        evidence: "Website is served over plain HTTP without TLS encryption (HTTPS). Browsers mark this site as 'Not Secure'.",
+        evidence: "Website is served over plain HTTP without TLS encryption (HTTPS). Modern browsers mark this site as 'Not Secure'.",
         selectorOrUrl: targetUrl,
         confidence: 1.0,
       });
     }
 
-    // 1. Mobile Viewport Evaluation (375x812 iPhone / Modern Mobile)
+    // =========================================================================
+    // PHASE 1: Mobile Viewport Audit (375px × 812px iPhone Emulation)
+    // =========================================================================
     const mobileContext = await browser.newContext({
       viewport: { width: 375, height: 812 },
       userAgent:
@@ -140,14 +173,6 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     });
 
     const mobilePage = await mobileContext.newPage();
-
-    // Track console errors
-    mobilePage.on("console", (msg) => {
-      if (msg.type() === "error") {
-        jsConsoleErrorsCount++;
-      }
-    });
-
     const startTime = Date.now();
 
     try {
@@ -162,42 +187,44 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       findings.push({
         category: "technical",
         finding: "Connection Timeout or Failure",
-        evidence: `Initial page load failed or timed out (${initialLoadLatencyMs}ms): ${err.message}`,
+        evidence: `Initial mobile page load failed or timed out (${initialLoadLatencyMs}ms): ${err.message}`,
         selectorOrUrl: targetUrl,
         confidence: 0.95,
       });
     }
 
-    const safeEvaluate = async <T>(fn: () => T, fallback: T): Promise<T> => {
-      try {
-        return await mobilePage.evaluate(fn);
-      } catch {
-        return fallback;
-      }
-    };
-
-    // Inspect Viewport Meta
-    const viewportMetaPresent = await safeEvaluate(() => {
-      const meta = document.querySelector('meta[name="viewport"]');
-      return meta !== null;
-    }, false);
+    // 1. Inspect Viewport Meta on Mobile
+    let viewportMetaPresent = false;
+    try {
+      viewportMetaPresent = await mobilePage.evaluate(() => {
+        const meta = document.querySelector('meta[name="viewport"]');
+        return meta !== null;
+      });
+    } catch {
+      viewportMetaPresent = false;
+    }
 
     if (!viewportMetaPresent) {
       findings.push({
         category: "ux",
         finding: "Missing Responsive Viewport Meta Tag",
-        evidence: "<meta name='viewport'> tag is absent. Mobile devices will render desktop-scaled layout, causing extreme pinch-to-zoom friction.",
+        evidence: "<meta name='viewport'> tag is absent. Mobile devices render desktop-scaled layout, causing extreme pinch-to-zoom friction.",
         selectorOrUrl: "head > meta[name='viewport']",
         confidence: 1.0,
       });
     }
 
-    // Inspect Horizontal Layout Overflow on Mobile
-    const hasHorizontalOverflow = await safeEvaluate(() => {
-      const docWidth = document.documentElement.offsetWidth;
-      const scrollWidth = document.documentElement.scrollWidth;
-      return scrollWidth > docWidth + 5;
-    }, false);
+    // 2. Inspect Horizontal Layout Overflow on Mobile
+    let hasHorizontalOverflow = false;
+    try {
+      hasHorizontalOverflow = await mobilePage.evaluate(() => {
+        const docWidth = document.documentElement.offsetWidth;
+        const scrollWidth = document.documentElement.scrollWidth;
+        return scrollWidth > docWidth + 5;
+      });
+    } catch {
+      hasHorizontalOverflow = false;
+    }
 
     if (hasHorizontalOverflow) {
       findings.push({
@@ -209,65 +236,111 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       });
     }
 
-    // Inspect Conversion Anchors (Direct Call, WhatsApp, Forms)
-    const conversionSignals = await safeEvaluate(() => {
-      const links = Array.from(document.querySelectorAll("a"));
-      const hasDirectClickToCall = links.some((a) => (a.href || "").toLowerCase().startsWith("tel:"));
-      const hasWhatsAppDirectLink = links.some(
-        (a) =>
-          (a.href || "").toLowerCase().includes("wa.me") ||
-          (a.href || "").toLowerCase().includes("api.whatsapp.com")
-      );
-
-      const forms = Array.from(document.querySelectorAll("form"));
-      const hasInteractiveBookingForm =
-        forms.length > 0 ||
-        document.querySelectorAll('input[type="date"], input[type="time"], select, iframe[src*="calendly"], iframe[src*="acuity"]').length > 0;
-
-      const sampleLinks = links
-        .map((a) => a.getAttribute("href"))
-        .filter((h): h is string => Boolean(h && !h.startsWith("#") && !h.startsWith("javascript:")));
-
-      return {
-        hasDirectClickToCall,
-        hasWhatsAppDirectLink,
-        hasInteractiveBookingForm,
-        sampleLinks: sampleLinks.slice(0, 15),
-      };
-    }, {
+    // 3. Inspect Mobile Conversion Anchors (Direct Call, WhatsApp)
+    let mobileSignals = {
       hasDirectClickToCall: false,
       hasWhatsAppDirectLink: false,
-      hasInteractiveBookingForm: false,
-      sampleLinks: [] as string[],
-    });
+    };
+    try {
+      mobileSignals = await mobilePage.evaluate(() => {
+        const links = Array.from(document.querySelectorAll("a"));
+        const hasDirectClickToCall = links.some((a) => (a.href || "").toLowerCase().startsWith("tel:"));
+        const hasWhatsAppDirectLink = links.some(
+          (a) =>
+            (a.href || "").toLowerCase().includes("wa.me") ||
+            (a.href || "").toLowerCase().includes("api.whatsapp.com")
+        );
+        return { hasDirectClickToCall, hasWhatsAppDirectLink };
+      });
+    } catch {
+      // Fallback
+    }
 
-    if (!conversionSignals.hasDirectClickToCall) {
+    if (!mobileSignals.hasDirectClickToCall) {
       findings.push({
         category: "conversion",
         finding: "Missing Direct Click-to-Call Link",
-        evidence: "No 'tel:' protocol anchors found on page. Mobile visitors cannot tap to call directly from their phones.",
+        evidence: "No 'tel:' protocol anchors found on mobile view. Mobile visitors cannot tap to call directly from their phone dialer.",
         confidence: 0.9,
       });
     }
 
-    if (!conversionSignals.hasInteractiveBookingForm) {
+    await mobileContext.close();
+
+    // =========================================================================
+    // PHASE 2: Desktop Viewport Audit (1440px × 900px Desktop Simulation)
+    // =========================================================================
+    const desktopContext = await browser.newContext({
+      viewport: { width: 1440, height: 900 },
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    });
+
+    const desktopPage = await desktopContext.newPage();
+
+    // Track JavaScript console crashes
+    desktopPage.on("console", (msg) => {
+      if (msg.type() === "error") {
+        jsConsoleErrorsCount++;
+      }
+    });
+
+    try {
+      await desktopPage.goto(targetUrl, {
+        waitUntil: "domcontentloaded",
+        timeout: 4000,
+      });
+      await desktopPage.waitForTimeout(300);
+    } catch {
+      // Ignore desktop secondary timeout
+    }
+
+    // 4. Inspect Interactive Scheduling & Booking Funnels (Desktop/Global DOM)
+    let desktopSignals = {
+      hasInteractiveBookingForm: false,
+      sampleLinks: [] as string[],
+    };
+    try {
+      desktopSignals = await desktopPage.evaluate(() => {
+        const forms = Array.from(document.querySelectorAll("form"));
+        const hasInteractiveBookingForm =
+          forms.length > 0 ||
+          document.querySelectorAll(
+            'input[type="date"], input[type="time"], select, iframe[src*="calendly"], iframe[src*="acuity"], iframe[src*="setmore"], iframe[src*="cal.com"]'
+          ).length > 0;
+
+        const links = Array.from(document.querySelectorAll("a"));
+        const sampleLinks = links
+          .map((a) => a.getAttribute("href"))
+          .filter((h): h is string => Boolean(h && !h.startsWith("#") && !h.startsWith("javascript:")));
+
+        return {
+          hasInteractiveBookingForm,
+          sampleLinks: sampleLinks.slice(0, 15),
+        };
+      });
+    } catch {
+      // Fallback
+    }
+
+    if (!desktopSignals.hasInteractiveBookingForm) {
       findings.push({
         category: "conversion",
         finding: "Missing Interactive Scheduling / Intake Funnel",
-        evidence: "No interactive date picker, scheduling form, or booking embed detected on mobile viewport.",
+        evidence: "No interactive date picker, scheduling form, or calendar embed detected across mobile/desktop views.",
         confidence: 0.85,
       });
     }
 
-    // Check Broken Links Sample with SSRF validation on every target link
-    for (const href of conversionSignals.sampleLinks) {
+    // 5. Broken Links Verification with Per-Link SSRF Shielding
+    for (const href of desktopSignals.sampleLinks) {
       if (!href) continue;
       try {
         const resolvedUrl = new URL(href, targetUrl).toString();
-        // Validate target link before making HEAD request (prevent 2nd SSRF hop)
+        // Validate target link before making HEAD request (prevent 2nd-hop SSRF)
         await this.validateUrlSecurity(resolvedUrl, allowLocalhostForTesting);
 
-        const res = await mobileContext.request.head(resolvedUrl, { timeout: 3000 }).catch(() => null);
+        const res = await desktopContext.request.head(resolvedUrl, { timeout: 3000 }).catch(() => null);
         if (res && res.status() >= 400) {
           brokenLinksCount++;
           findings.push({
@@ -284,7 +357,7 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       }
     }
 
-    await mobileContext.close();
+    await desktopContext.close();
 
     return {
       viewportMetaPresent,
@@ -293,9 +366,9 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       brokenLinksCount,
       jsConsoleErrorsCount,
       initialLoadLatencyMs,
-      hasDirectClickToCall: conversionSignals.hasDirectClickToCall,
-      hasWhatsAppDirectLink: conversionSignals.hasWhatsAppDirectLink,
-      hasInteractiveBookingForm: conversionSignals.hasInteractiveBookingForm,
+      hasDirectClickToCall: mobileSignals.hasDirectClickToCall,
+      hasWhatsAppDirectLink: mobileSignals.hasWhatsAppDirectLink,
+      hasInteractiveBookingForm: desktopSignals.hasInteractiveBookingForm,
       findings,
     };
   }
