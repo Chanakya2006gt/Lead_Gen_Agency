@@ -46,6 +46,9 @@ export function LeadDossierModal({ lead, onClose, onStatusChange }: LeadDossierM
   const findings: AuditFinding[] = telemetry?.findings || [];
   const pitch = dossier?.recommendedPitch;
 
+  const founderName = process.env.NEXT_PUBLIC_AGENCY_FOUNDER_NAME || "Agency Founder";
+  const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME || "Digital Agency";
+
   // Clean phone number for tel: and WhatsApp links
   const cleanPhone = lead.phone ? lead.phone.replace(/[^0-9+]/g, "") : "";
 
@@ -67,7 +70,8 @@ ${pitch?.suggestedScope || "Complete responsive digital storefront with 24/7 cal
 Would you be open to a 5-minute teardown video showing how to fix this?
 
 Best regards,
-Agency Founder`;
+${founderName}
+${agencyName}`;
 
   // Formatted WhatsApp script
   const whatsAppCopy = `Hey ${lead.name} team! 👋 Saw your impressive ${lead.rating}★ rating on Google (${lead.reviewCount} reviews). 
@@ -76,7 +80,9 @@ ${lead.hasWebsite
   ? `Quick note: I audited your site and noticed ${pitch?.identifiedBottlenecks?.[0]?.toLowerCase() || "mobile booking is currently missing"}.`
   : "Noticed you don't have an official website on Google Maps yet, so customers searching on mobile can't easily book or see your full menu/services."}
 
-We help local businesses set up automated ${pitch?.coreAngle || "digital storefronts and booking funnels"}. Would you like me to send a 2-minute video breakdown of how to capture more online bookings?`;
+We help local businesses set up automated ${pitch?.coreAngle || "digital storefronts and booking funnels"}. Would you like me to send a 2-minute video breakdown of how to capture more online bookings?
+
+— ${founderName} (${agencyName})`;
 
   // Formatted Phone Gatekeeper script
   const phoneScriptCopy = `[FRONT DESK GATEKEEPER SCRIPT]
