@@ -39,7 +39,11 @@ export interface BusinessDossier {
   confidenceScore: number;
   overallLeadScore: number;
   opportunityType: OpportunityType;
+  hasWebsite?: boolean;
+  hasGbpWebsiteLink?: boolean;
   isGbpDisconnected?: boolean;
+  websiteUrl?: string | null;
+  gbpWebsiteUrl?: string | null;
   unlinkedWebsiteUrl?: string | null;
   identifiedStrengths: string[];
   identifiedBottlenecks: string[];
@@ -77,7 +81,16 @@ export const leads = sqliteTable("leads", {
   formattedAddress: sqliteText("formatted_address"),
   phone: sqliteText("phone"),
   googleMapsUrl: sqliteText("google_maps_url"),
+  
+  // Explicit Semantic Website Model
+  hasWebsite: sqliteInteger("has_website", { mode: "boolean" }).notNull().default(false),
+  hasGbpWebsiteLink: sqliteInteger("has_gbp_website_link", { mode: "boolean" }).notNull().default(false),
+  isGbpDisconnected: sqliteInteger("is_gbp_disconnected", { mode: "boolean" }).notNull().default(false),
   websiteUrl: sqliteText("website_url"),
+  gbpWebsiteUrl: sqliteText("gbp_website_url"),
+  unlinkedWebsiteUrl: sqliteText("unlinked_website_url"),
+
+  // Longitudinal Reputation Tracking
   rating: sqliteReal("rating").notNull(),
   reviewCount: sqliteInteger("review_count").notNull(),
   previousRating: sqliteReal("previous_rating"),
@@ -87,11 +100,12 @@ export const leads = sqliteTable("leads", {
   reviewsLast90Days: sqliteInteger("reviews_last_90_days"),
   reviewsLast180Days: sqliteInteger("reviews_last_180_days"),
   reviewTrend: sqliteText("review_trend").$type<ReviewTrend>().notNull().default("UNKNOWN"),
-  hasWebsite: sqliteInteger("has_website", { mode: "boolean" }).notNull().default(false),
-  isGbpDisconnected: sqliteInteger("is_gbp_disconnected", { mode: "boolean" }).notNull().default(false),
-  unlinkedWebsiteUrl: sqliteText("unlinked_website_url"),
+  
+  // Technical Audit State
   auditStatus: sqliteText("audit_status").notNull().default("PENDING"),
   auditTelemetry: sqliteText("audit_telemetry", { mode: "json" }).$type<AuditTelemetry>(),
+  
+  // 4D Scoring & Synthesis
   reputationScore: sqliteInteger("reputation_score").default(0),
   digitalGapScore: sqliteInteger("digital_gap_score").default(0),
   opportunityScore: sqliteInteger("opportunity_score").default(0),
@@ -100,6 +114,7 @@ export const leads = sqliteTable("leads", {
   opportunityType: sqliteText("opportunity_type").$type<OpportunityType>().notNull().default("UNKNOWN"),
   dossier: sqliteText("dossier", { mode: "json" }).$type<BusinessDossier>(),
   humanStatus: sqliteText("human_status").$type<HumanStatus>().notNull().default("NEW"),
+  
   // Observation and Longitudinal Intelligence
   firstObservedAt: sqliteText("first_observed_at"),
   lastObservedAt: sqliteText("last_observed_at"),

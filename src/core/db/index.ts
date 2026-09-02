@@ -52,7 +52,10 @@ sqlite.exec(`
     reviews_last_180_days INTEGER,
     review_trend TEXT NOT NULL DEFAULT 'UNKNOWN',
     has_website INTEGER NOT NULL DEFAULT 0,
+    has_gbp_website_link INTEGER NOT NULL DEFAULT 0,
     is_gbp_disconnected INTEGER NOT NULL DEFAULT 0,
+    website_url TEXT,
+    gbp_website_url TEXT,
     unlinked_website_url TEXT,
     audit_status TEXT NOT NULL DEFAULT 'PENDING',
     audit_telemetry TEXT,
@@ -124,6 +127,12 @@ try {
   }
   if (!existingColumns.has("is_gbp_disconnected")) {
     sqlite.exec("ALTER TABLE leads ADD COLUMN is_gbp_disconnected INTEGER NOT NULL DEFAULT 0;");
+  }
+  if (!existingColumns.has("has_gbp_website_link")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN has_gbp_website_link INTEGER NOT NULL DEFAULT 0;");
+  }
+  if (!existingColumns.has("gbp_website_url")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN gbp_website_url TEXT;");
   }
   if (!existingColumns.has("unlinked_website_url")) {
     sqlite.exec("ALTER TABLE leads ADD COLUMN unlinked_website_url TEXT;");

@@ -179,16 +179,18 @@ export class ScanPipelineService {
               identitySource = "google_verified";
             }
 
-            // Step D: Headless Dual-Viewport Audit or Secondary Unlinked Discovery
-            const rawWebsiteUrl = business.websiteUrl;
-            let auditStatus: "PENDING" | "NO_WEBSITE" | "AUDITED" | "FAILED" = "PENDING";
-            let auditTelemetry = null;
+            // Step D: Decoupled Semantic Website Resolution & Headless Audit
+            const rawGbpWebsiteUrl = business.websiteUrl || null;
+            const hasGbpWebsiteLink = Boolean(rawGbpWebsiteUrl);
+            let hasWebsite = hasGbpWebsiteLink;
             let isGbpDisconnected = false;
             let unlinkedWebsiteUrl: string | null = null;
-            let effectiveAuditUrl: string | null = rawWebsiteUrl;
+            let canonicalWebsiteUrl: string | null = rawGbpWebsiteUrl;
+            let auditStatus: "PENDING" | "NO_WEBSITE" | "AUDITED" | "FAILED" = "PENDING";
+            let auditTelemetry = null;
 
-            if (!filterResult.hasWebsite || !rawWebsiteUrl) {
-              // Attempt Zero-Cost Secondary Domain Resolution & Multi-Signal Entity Proof
+            if (!hasGbpWebsiteLink) {
+              // Attempt Secondary Multi-Tier Domain Resolution & Entity Proof
               const secondaryResult = await SecondaryDomainResolver.resolve({
                 name: business.name,
                 formattedAddress: business.formattedAddress,
@@ -197,28 +199,31 @@ export class ScanPipelineService {
               });
 
               if (secondaryResult.verified && secondaryResult.unlinkedWebsiteUrl) {
+                hasWebsite = true;
                 isGbpDisconnected = true;
                 unlinkedWebsiteUrl = secondaryResult.unlinkedWebsiteUrl;
-                effectiveAuditUrl = secondaryResult.unlinkedWebsiteUrl;
+                canonicalWebsiteUrl = secondaryResult.unlinkedWebsiteUrl;
 
                 try {
                   const allowLocalhost = options.source === "mock" || process.env.NODE_ENV === "test";
-                  auditTelemetry = await auditEngine.auditUrl(effectiveAuditUrl, allowLocalhost);
+                  auditTelemetry = await auditEngine.auditUrl(canonicalWebsiteUrl, allowLocalhost);
                   auditStatus = "AUDITED";
                 } catch (auditErr) {
-                  console.warn(`Audit failed for unlinked site ${business.name} (${effectiveAuditUrl}):`, auditErr);
+                  console.warn(`Audit failed for unlinked site ${business.name} (${canonicalWebsiteUrl}):`, auditErr);
                   auditStatus = "FAILED";
                 }
               } else {
+                hasWebsite = false;
+                isGbpDisconnected = false;
                 auditStatus = "NO_WEBSITE";
               }
             } else {
               try {
                 const allowLocalhost = options.source === "mock" || process.env.NODE_ENV === "test";
-                auditTelemetry = await auditEngine.auditUrl(rawWebsiteUrl, allowLocalhost);
+                auditTelemetry = await auditEngine.auditUrl(rawGbpWebsiteUrl!, allowLocalhost);
                 auditStatus = "AUDITED";
               } catch (auditErr) {
-                console.warn(`Audit failed for ${business.name} (${rawWebsiteUrl}):`, auditErr);
+                console.warn(`Audit failed for ${business.name} (${rawGbpWebsiteUrl}):`, auditErr);
                 auditStatus = "FAILED";
               }
             }
@@ -235,10 +240,10 @@ export class ScanPipelineService {
                 reviewTrend: filterResult.reviewTrend,
                 reviewsLast30Days: filterResult.reviewsLast30Days,
                 reviewsLast90Days: filterResult.reviewsLast90Days,
-                hasWebsite: filterResult.hasWebsite,
+                hasWebsite,
                 isGbpDisconnected,
                 unlinkedWebsiteUrl,
-                websiteUrl: rawWebsiteUrl || unlinkedWebsiteUrl,
+                websiteUrl: canonicalWebsiteUrl,
                 phone: business.phone,
                 formattedAddress: business.formattedAddress,
                 googleMapsUrl: business.googleMapsUrl,
@@ -248,6 +253,21 @@ export class ScanPipelineService {
             );
 
             const now = new Date().toISOString();
+
+            // Fetch existing lead before transaction to check domain migration gate
+            let existingLeadPreTx = db.select().from(leads).where(eq(leads.placeId, placeId)).get();
+
+            let verifiedMigrationUrl = canonicalWebsiteUrl;
+            if (existingLeadPreTx && existingLeadPreTx.websiteUrl && canonicalWebsiteUrl && canonicalWebsiteUrl !== existingLeadPreTx.websiteUrl) {
+              const migrationPassed = await SecondaryDomainResolver.verifyDomainMigration(
+                canonicalWebsiteUrl,
+                { name: business.name, formattedAddress: business.formattedAddress, phone: business.phone },
+                existingLeadPreTx.websiteUrl
+              );
+              if (!migrationPassed || auditStatus === "FAILED") {
+                verifiedMigrationUrl = existingLeadPreTx.websiteUrl;
+              }
+            }
 
             // =========================================================================
             // Step F: ATOMIC ACID TRANSACTION INVARIANT
@@ -265,7 +285,7 @@ export class ScanPipelineService {
                 return; // Gracefully abort write
               }
 
-              // 1. Fetch existing lead record
+              // 1. Fetch existing lead record within transaction
               let existingLead = tx.select().from(leads).where(eq(leads.placeId, placeId)).get();
 
               // Secondary Linking fallback if not found by primary placeId
@@ -327,21 +347,17 @@ export class ScanPipelineService {
                 new Date(now).getTime() >=
                   new Date(existingLead.lastObservedAt || existingLead.createdAt).getTime();
 
-              // 4. Evidence-Based Domain Migration & Non-Destructive Field Resolution
-              let effectiveWebsiteUrl = business.websiteUrl || existingLead?.websiteUrl || unlinkedWebsiteUrl || null;
-              if (existingLead && existingLead.websiteUrl && business.websiteUrl && business.websiteUrl !== existingLead.websiteUrl) {
-                // Legitimate domain migration: only promote if new URL passed audit (HTTP 200)
-                if (auditStatus === "AUDITED") {
-                  effectiveWebsiteUrl = business.websiteUrl;
-                } else {
-                  effectiveWebsiteUrl = existingLead.websiteUrl;
-                }
-              }
+              // 4. Authoritative Semantic Website State Calculation
+              const effectiveWebsiteUrl = verifiedMigrationUrl || existingLead?.websiteUrl || null;
+              const effectiveGbpWebsiteUrl = rawGbpWebsiteUrl || existingLead?.gbpWebsiteUrl || null;
+              const effectiveUnlinkedWebsiteUrl = unlinkedWebsiteUrl || existingLead?.unlinkedWebsiteUrl || null;
+              const effectiveHasGbpLink = Boolean(effectiveGbpWebsiteUrl);
+              const effectiveHasWebsite = Boolean(effectiveWebsiteUrl);
+              const effectiveIsGbpDisconnected = effectiveHasWebsite && !effectiveHasGbpLink;
 
               const effectivePhone = business.phone || existingLead?.phone || null;
               const effectiveAddress = business.formattedAddress || existingLead?.formattedAddress || null;
               const effectiveMapsUrl = business.googleMapsUrl || existingLead?.googleMapsUrl || null;
-              const effectiveHasWebsite = Boolean(business.websiteUrl || existingLead?.hasWebsite);
 
               if (existingLead) {
                 if (isNewestObservation) {
@@ -354,7 +370,12 @@ export class ScanPipelineService {
                       formattedAddress: effectiveAddress,
                       phone: effectivePhone,
                       googleMapsUrl: effectiveMapsUrl,
+                      hasWebsite: effectiveHasWebsite,
+                      hasGbpWebsiteLink: effectiveHasGbpLink,
+                      isGbpDisconnected: effectiveIsGbpDisconnected,
                       websiteUrl: effectiveWebsiteUrl,
+                      gbpWebsiteUrl: effectiveGbpWebsiteUrl,
+                      unlinkedWebsiteUrl: effectiveUnlinkedWebsiteUrl,
                       rating: filterResult.rating,
                       reviewCount: filterResult.reviewCount,
                       previousRating: previousRating ?? existingLead.previousRating,
@@ -364,9 +385,6 @@ export class ScanPipelineService {
                       reviewsLast90Days: filterResult.reviewsLast90Days,
                       reviewsLast180Days: filterResult.reviewsLast180Days,
                       reviewTrend: filterResult.reviewTrend,
-                      hasWebsite: effectiveHasWebsite,
-                      isGbpDisconnected: isGbpDisconnected || existingLead.isGbpDisconnected,
-                      unlinkedWebsiteUrl: unlinkedWebsiteUrl || existingLead.unlinkedWebsiteUrl,
                       auditStatus: (auditStatus === "FAILED" && existingLead.auditStatus === "AUDITED") ? existingLead.auditStatus : auditStatus,
                       auditTelemetry: (auditTelemetry || existingLead.auditTelemetry) as any,
                       reputationScore: dossier.reputationScore,
@@ -397,7 +415,12 @@ export class ScanPipelineService {
                     formattedAddress: effectiveAddress,
                     phone: effectivePhone,
                     googleMapsUrl: effectiveMapsUrl,
+                    hasWebsite: effectiveHasWebsite,
+                    hasGbpWebsiteLink: effectiveHasGbpLink,
+                    isGbpDisconnected: effectiveIsGbpDisconnected,
                     websiteUrl: effectiveWebsiteUrl,
+                    gbpWebsiteUrl: effectiveGbpWebsiteUrl,
+                    unlinkedWebsiteUrl: effectiveUnlinkedWebsiteUrl,
                     rating: filterResult.rating,
                     reviewCount: filterResult.reviewCount,
                     previousRating: null,
@@ -407,9 +430,6 @@ export class ScanPipelineService {
                     reviewsLast90Days: filterResult.reviewsLast90Days,
                     reviewsLast180Days: filterResult.reviewsLast180Days,
                     reviewTrend: filterResult.reviewTrend,
-                    hasWebsite: effectiveHasWebsite,
-                    isGbpDisconnected,
-                    unlinkedWebsiteUrl,
                     auditStatus,
                     auditTelemetry: auditTelemetry as any,
                     reputationScore: dossier.reputationScore,
