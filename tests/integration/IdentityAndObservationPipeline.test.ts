@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { db } from "@/core/db";
 import { discoveryScans, leads, leadObservations } from "@/core/db/schema";
 import { BusinessIdentityResolver } from "@/features/identity/BusinessIdentityResolver";
 import { eq } from "drizzle-orm";
+import crypto from "crypto";
 
 describe("Stable Identity & Observation History Pipeline", () => {
   it("Resolves identical Place ID for the same business across multiple discovery searches", () => {
@@ -28,16 +29,12 @@ describe("Stable Identity & Observation History Pipeline", () => {
   });
 
   it("Preserves verified data non-destructively when a second scrape temporarily returns null", () => {
-    const placeId = "det_test_business_1234567890";
-    const scanId1 = "scan_001";
-    const scanId2 = "scan_002";
+    const placeId = `det_pipe_${crypto.randomUUID()}`;
+    const scanId1 = `scan_p1_${crypto.randomUUID()}`;
+    const scanId2 = `scan_p2_${crypto.randomUUID()}`;
+    const leadId = `lead_p_${crypto.randomUUID()}`;
     const now1 = "2026-09-01T10:00:00.000Z";
     const now2 = "2026-09-02T10:00:00.000Z";
-
-    // Clean up any test records
-    db.delete(leads).where(eq(leads.placeId, placeId)).run();
-    db.delete(discoveryScans).where(eq(discoveryScans.id, scanId1)).run();
-    db.delete(discoveryScans).where(eq(discoveryScans.id, scanId2)).run();
 
     // Insert Scan records
     db.insert(discoveryScans).values({
@@ -58,7 +55,7 @@ describe("Stable Identity & Observation History Pipeline", () => {
 
     // 1. Initial Discovery Run
     db.insert(leads).values({
-      id: "lead_test_001",
+      id: leadId,
       scanId: scanId1,
       placeId,
       name: "Apex Dental Care",
@@ -89,8 +86,8 @@ describe("Stable Identity & Observation History Pipeline", () => {
 
     // Log first observation
     db.insert(leadObservations).values({
-      id: "obs_001",
-      leadId: "lead_test_001",
+      id: crypto.randomUUID(),
+      leadId,
       scanId: scanId1,
       observedRating: 4.8,
       observedReviewCount: 150,
@@ -120,7 +117,7 @@ describe("Stable Identity & Observation History Pipeline", () => {
 
     // Log second observation
     db.insert(leadObservations).values({
-      id: "obs_002",
+      id: crypto.randomUUID(),
       leadId: existing!.id,
       scanId: scanId2,
       observedRating: 4.8,

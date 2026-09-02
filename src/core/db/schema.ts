@@ -68,8 +68,8 @@ export const discoveryScans = sqliteTable("discovery_scans", {
 
 export const leads = sqliteTable("leads", {
   id: sqliteText("id").primaryKey(),
-  scanId: sqliteText("scan_id").references(() => discoveryScans.id, { onDelete: "cascade" }),
-  placeId: sqliteText("place_id").notNull(),
+  scanId: sqliteText("scan_id").references(() => discoveryScans.id, { onDelete: "set null" }),
+  placeId: sqliteText("place_id").notNull().unique(),
   name: sqliteText("name").notNull(),
   category: sqliteText("category"),
   formattedAddress: sqliteText("formatted_address"),
@@ -78,6 +78,8 @@ export const leads = sqliteTable("leads", {
   websiteUrl: sqliteText("website_url"),
   rating: sqliteReal("rating").notNull(),
   reviewCount: sqliteInteger("review_count").notNull(),
+  previousRating: sqliteReal("previous_rating"),
+  previousReviewCount: sqliteInteger("previous_review_count"),
   lastReviewDate: sqliteText("last_review_date"),
   reviewsLast30Days: sqliteInteger("reviews_last_30_days"),
   reviewsLast90Days: sqliteInteger("reviews_last_90_days"),
@@ -108,7 +110,7 @@ export const leads = sqliteTable("leads", {
 export const leadObservations = sqliteTable("lead_observations", {
   id: sqliteText("id").primaryKey(),
   leadId: sqliteText("lead_id").references(() => leads.id, { onDelete: "cascade" }),
-  scanId: sqliteText("scan_id").references(() => discoveryScans.id, { onDelete: "cascade" }),
+  scanId: sqliteText("scan_id").references(() => discoveryScans.id, { onDelete: "set null" }),
   observedRating: sqliteReal("observed_rating").notNull(),
   observedReviewCount: sqliteInteger("observed_review_count").notNull(),
   observedWebsiteUrl: sqliteText("observed_website_url"),

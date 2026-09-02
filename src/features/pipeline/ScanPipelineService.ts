@@ -1,6 +1,6 @@
 import { db } from "@/core/db";
 import { discoveryScans, leads, leadObservations } from "@/core/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { IDiscoveryAdapter } from "@/features/discovery/types";
 import { GooglePlacesApiAdapter } from "@/features/discovery/GooglePlacesApiAdapter";
 import { MockDiscoveryAdapter } from "@/features/discovery/MockDiscoveryAdapter";
@@ -156,9 +156,7 @@ export class ScanPipelineService {
           batch.map(async ({ business, filterResult }) => {
             if (abortController.signal.aborted) return;
 
-            qualifiedCount++;
-
-            // Step C: Identity Resolution & Stable Entity Extraction
+            // Step C: Canonical Identity Resolution & Cross-Adapter Harmonization
             const placeId = business.placeId || BusinessIdentityResolver.resolveId({
               name: business.name,
               formattedAddress: business.formattedAddress,
@@ -171,29 +169,20 @@ export class ScanPipelineService {
               identitySource = "google_verified";
             }
 
-            // Check if this business entity already exists in our database
-            const existingLead = db.select().from(leads).where(eq(leads.placeId, placeId)).get();
-
-            // Non-Destructive Field Resolution: preserve verified existing contact points if current scrape glitched
-            const effectiveWebsiteUrl = business.websiteUrl || existingLead?.websiteUrl || null;
-            const effectivePhone = business.phone || existingLead?.phone || null;
-            const effectiveAddress = business.formattedAddress || existingLead?.formattedAddress || null;
-            const effectiveMapsUrl = business.googleMapsUrl || existingLead?.googleMapsUrl || null;
-            const effectiveHasWebsite = Boolean(effectiveWebsiteUrl);
-
             // Step D: Headless Dual-Viewport Audit or No-Website Fast Track
+            const rawWebsiteUrl = business.websiteUrl;
             let auditStatus: "PENDING" | "NO_WEBSITE" | "AUDITED" | "FAILED" = "PENDING";
             let auditTelemetry = null;
 
-            if (!effectiveHasWebsite) {
+            if (!filterResult.hasWebsite || !rawWebsiteUrl) {
               auditStatus = "NO_WEBSITE";
-            } else if (effectiveWebsiteUrl) {
+            } else {
               try {
                 const allowLocalhost = options.source === "mock" || process.env.NODE_ENV === "test";
-                auditTelemetry = await auditEngine.auditUrl(effectiveWebsiteUrl, allowLocalhost);
+                auditTelemetry = await auditEngine.auditUrl(rawWebsiteUrl, allowLocalhost);
                 auditStatus = "AUDITED";
               } catch (auditErr) {
-                console.warn(`Audit failed for ${business.name} (${effectiveWebsiteUrl}):`, auditErr);
+                console.warn(`Audit failed for ${business.name} (${rawWebsiteUrl}):`, auditErr);
                 auditStatus = "FAILED";
               }
             }
@@ -210,11 +199,11 @@ export class ScanPipelineService {
                 reviewTrend: filterResult.reviewTrend,
                 reviewsLast30Days: filterResult.reviewsLast30Days,
                 reviewsLast90Days: filterResult.reviewsLast90Days,
-                hasWebsite: effectiveHasWebsite,
-                websiteUrl: effectiveWebsiteUrl,
-                phone: effectivePhone,
-                formattedAddress: effectiveAddress,
-                googleMapsUrl: effectiveMapsUrl,
+                hasWebsite: filterResult.hasWebsite,
+                websiteUrl: rawWebsiteUrl,
+                phone: business.phone,
+                formattedAddress: business.formattedAddress,
+                googleMapsUrl: business.googleMapsUrl,
                 auditTelemetry,
               },
               process.env.OPENAI_API_KEY
@@ -222,105 +211,202 @@ export class ScanPipelineService {
 
             const now = new Date().toISOString();
 
-            // Calculate Longitudinal Metrics across Scans
-            const reviewCountDelta = existingLead ? filterResult.reviewCount - existingLead.reviewCount : 0;
-            const ratingDelta = existingLead ? +(filterResult.rating - existingLead.rating).toFixed(1) : 0;
-            const observationCount = existingLead ? existingLead.observationCount + 1 : 1;
-            const firstObservedAt = existingLead?.firstObservedAt || existingLead?.createdAt || now;
-            const leadId = existingLead?.id || crypto.randomUUID();
+            // =========================================================================
+            // Step F: ATOMIC ACID TRANSACTION INVARIANT
+            // Database Invariant -> Atomic Transaction -> Immutable Observation -> Derived Authoritative State
+            // =========================================================================
+            db.transaction((tx) => {
+              // 1. Fetch existing lead record
+              let existingLead = tx.select().from(leads).where(eq(leads.placeId, placeId)).get();
 
-            // Step F: Non-Destructive Entity Persistence (Upsert)
-            if (existingLead) {
-              db.update(leads)
-                .set({
-                  scanId, // Associate with current active scan
-                  name: business.name,
-                  category: business.category || options.niche,
-                  formattedAddress: effectiveAddress,
-                  phone: effectivePhone,
-                  googleMapsUrl: effectiveMapsUrl,
-                  websiteUrl: effectiveWebsiteUrl,
-                  rating: filterResult.rating,
-                  reviewCount: filterResult.reviewCount,
-                  lastReviewDate: filterResult.lastReviewDate || existingLead.lastReviewDate,
-                  reviewsLast30Days: filterResult.reviewsLast30Days,
-                  reviewsLast90Days: filterResult.reviewsLast90Days,
-                  reviewsLast180Days: filterResult.reviewsLast180Days,
-                  reviewTrend: filterResult.reviewTrend,
-                  hasWebsite: effectiveHasWebsite,
-                  auditStatus: auditStatus === "PENDING" && existingLead.auditStatus === "AUDITED" ? existingLead.auditStatus : auditStatus,
-                  auditTelemetry: (auditTelemetry || existingLead.auditTelemetry) as any,
-                  reputationScore: dossier.reputationScore,
-                  digitalGapScore: dossier.digitalGapScore,
-                  opportunityScore: dossier.opportunityScore,
-                  confidenceScore: dossier.confidenceScore,
-                  totalLeadScore: dossier.overallLeadScore,
-                  opportunityType: dossier.opportunityType,
-                  dossier: dossier as any,
-                  lastObservedAt: now,
-                  observationCount,
-                  reviewCountDelta,
-                  ratingDelta,
-                  identitySource,
-                  updatedAt: now,
-                })
-                .where(eq(leads.id, existingLead.id))
-                .run();
-            } else {
-              db.insert(leads)
+              // Secondary Linking fallback if not found by primary placeId
+              if (!existingLead && business.phone) {
+                const allLeads = tx.select({
+                  id: leads.id,
+                  placeId: leads.placeId,
+                  name: leads.name,
+                  phone: leads.phone,
+                  formattedAddress: leads.formattedAddress,
+                }).from(leads).all();
+
+                const secondaryMatch = BusinessIdentityResolver.findMatchingLead(
+                  {
+                    name: business.name,
+                    formattedAddress: business.formattedAddress,
+                    phone: business.phone,
+                    googleMapsUrl: business.googleMapsUrl,
+                  },
+                  allLeads
+                );
+
+                if (secondaryMatch) {
+                  existingLead = tx.select().from(leads).where(eq(leads.id, secondaryMatch.id)).get();
+                }
+              }
+
+              const targetLeadId = existingLead?.id || crypto.randomUUID();
+
+              // 2. Fetch Authoritative Preceding Observation from Ledger (not from mutable row)
+              const latestPrecedingObservation = existingLead
+                ? tx.select()
+                    .from(leadObservations)
+                    .where(eq(leadObservations.leadId, existingLead.id))
+                    .orderBy(desc(leadObservations.observedAt))
+                    .limit(1)
+                    .get()
+                : null;
+
+              const previousReviewCount = latestPrecedingObservation
+                ? latestPrecedingObservation.observedReviewCount
+                : null;
+              const previousRating = latestPrecedingObservation
+                ? latestPrecedingObservation.observedRating
+                : null;
+
+              // Calculate True Longitudinal Deltas against Preceding Observation
+              const reviewCountDelta = previousReviewCount !== null
+                ? filterResult.reviewCount - previousReviewCount
+                : 0;
+              const ratingDelta = previousRating !== null
+                ? +(filterResult.rating - previousRating).toFixed(1)
+                : 0;
+
+              // 3. Clock-Skew / Out-of-Order Guard:
+              // Only update current lead mutable properties if incoming observation is newer or equal to lastObservedAt
+              const isNewestObservation =
+                !existingLead ||
+                new Date(now).getTime() >=
+                  new Date(existingLead.lastObservedAt || existingLead.createdAt).getTime();
+
+              // 4. Evidence-Based Domain Migration & Non-Destructive Field Resolution
+              let effectiveWebsiteUrl = business.websiteUrl || existingLead?.websiteUrl || null;
+              if (existingLead && existingLead.websiteUrl && business.websiteUrl && business.websiteUrl !== existingLead.websiteUrl) {
+                // Legitimate domain migration: only promote if new URL passed audit (HTTP 200)
+                if (auditStatus === "AUDITED") {
+                  effectiveWebsiteUrl = business.websiteUrl;
+                } else {
+                  effectiveWebsiteUrl = existingLead.websiteUrl;
+                }
+              }
+
+              const effectivePhone = business.phone || existingLead?.phone || null;
+              const effectiveAddress = business.formattedAddress || existingLead?.formattedAddress || null;
+              const effectiveMapsUrl = business.googleMapsUrl || existingLead?.googleMapsUrl || null;
+              const effectiveHasWebsite = Boolean(effectiveWebsiteUrl);
+
+              if (existingLead) {
+                if (isNewestObservation) {
+                  // Atomic Update of Current State with Newest Data
+                  tx.update(leads)
+                    .set({
+                      scanId, // Associate with current discovery scan
+                      name: business.name,
+                      category: business.category || options.niche,
+                      formattedAddress: effectiveAddress,
+                      phone: effectivePhone,
+                      googleMapsUrl: effectiveMapsUrl,
+                      websiteUrl: effectiveWebsiteUrl,
+                      rating: filterResult.rating,
+                      reviewCount: filterResult.reviewCount,
+                      previousRating: previousRating ?? existingLead.previousRating,
+                      previousReviewCount: previousReviewCount ?? existingLead.previousReviewCount,
+                      lastReviewDate: filterResult.lastReviewDate || existingLead.lastReviewDate,
+                      reviewsLast30Days: filterResult.reviewsLast30Days,
+                      reviewsLast90Days: filterResult.reviewsLast90Days,
+                      reviewsLast180Days: filterResult.reviewsLast180Days,
+                      reviewTrend: filterResult.reviewTrend,
+                      hasWebsite: effectiveHasWebsite,
+                      auditStatus: (auditStatus === "FAILED" && existingLead.auditStatus === "AUDITED") ? existingLead.auditStatus : auditStatus,
+                      auditTelemetry: (auditTelemetry || existingLead.auditTelemetry) as any,
+                      reputationScore: dossier.reputationScore,
+                      digitalGapScore: dossier.digitalGapScore,
+                      opportunityScore: dossier.opportunityScore,
+                      confidenceScore: dossier.confidenceScore,
+                      totalLeadScore: dossier.overallLeadScore,
+                      opportunityType: dossier.opportunityType,
+                      dossier: dossier as any,
+                      lastObservedAt: now,
+                      reviewCountDelta,
+                      ratingDelta,
+                      identitySource,
+                      updatedAt: now,
+                    })
+                    .where(eq(leads.id, existingLead.id))
+                    .run();
+                }
+              } else {
+                // Atomic Insert of New Lead Entity
+                tx.insert(leads)
+                  .values({
+                    id: targetLeadId,
+                    scanId,
+                    placeId,
+                    name: business.name,
+                    category: business.category || options.niche,
+                    formattedAddress: effectiveAddress,
+                    phone: effectivePhone,
+                    googleMapsUrl: effectiveMapsUrl,
+                    websiteUrl: effectiveWebsiteUrl,
+                    rating: filterResult.rating,
+                    reviewCount: filterResult.reviewCount,
+                    previousRating: null,
+                    previousReviewCount: null,
+                    lastReviewDate: filterResult.lastReviewDate || null,
+                    reviewsLast30Days: filterResult.reviewsLast30Days,
+                    reviewsLast90Days: filterResult.reviewsLast90Days,
+                    reviewsLast180Days: filterResult.reviewsLast180Days,
+                    reviewTrend: filterResult.reviewTrend,
+                    hasWebsite: effectiveHasWebsite,
+                    auditStatus,
+                    auditTelemetry: auditTelemetry as any,
+                    reputationScore: dossier.reputationScore,
+                    digitalGapScore: dossier.digitalGapScore,
+                    opportunityScore: dossier.opportunityScore,
+                    confidenceScore: dossier.confidenceScore,
+                    totalLeadScore: dossier.overallLeadScore,
+                    opportunityType: dossier.opportunityType,
+                    dossier: dossier as any,
+                    humanStatus: "NEW",
+                    firstObservedAt: now,
+                    lastObservedAt: now,
+                    observationCount: 1,
+                    reviewCountDelta: 0,
+                    ratingDelta: 0,
+                    identitySource,
+                    createdAt: now,
+                    updatedAt: now,
+                  })
+                  .run();
+              }
+
+              // 5. Immutable Observation Append: ALWAYS append observation to ledger
+              tx.insert(leadObservations)
                 .values({
-                  id: leadId,
+                  id: crypto.randomUUID(),
+                  leadId: targetLeadId,
                   scanId,
-                  placeId,
-                  name: business.name,
-                  category: business.category || options.niche,
-                  formattedAddress: effectiveAddress,
-                  phone: effectivePhone,
-                  googleMapsUrl: effectiveMapsUrl,
-                  websiteUrl: effectiveWebsiteUrl,
-                  rating: filterResult.rating,
-                  reviewCount: filterResult.reviewCount,
-                  lastReviewDate: filterResult.lastReviewDate || null,
-                  reviewsLast30Days: filterResult.reviewsLast30Days,
-                  reviewsLast90Days: filterResult.reviewsLast90Days,
-                  reviewsLast180Days: filterResult.reviewsLast180Days,
-                  reviewTrend: filterResult.reviewTrend,
-                  hasWebsite: effectiveHasWebsite,
-                  auditStatus,
-                  auditTelemetry: auditTelemetry as any,
-                  reputationScore: dossier.reputationScore,
-                  digitalGapScore: dossier.digitalGapScore,
-                  opportunityScore: dossier.opportunityScore,
-                  confidenceScore: dossier.confidenceScore,
-                  totalLeadScore: dossier.overallLeadScore,
-                  opportunityType: dossier.opportunityType,
-                  dossier: dossier as any,
-                  humanStatus: "NEW",
-                  firstObservedAt,
-                  lastObservedAt: now,
-                  observationCount: 1,
-                  reviewCountDelta: 0,
-                  ratingDelta: 0,
-                  identitySource,
-                  createdAt: now,
-                  updatedAt: now,
+                  observedRating: filterResult.rating,
+                  observedReviewCount: filterResult.reviewCount,
+                  observedWebsiteUrl: effectiveWebsiteUrl,
+                  observedPhone: effectivePhone,
+                  observedAt: now,
                 })
                 .run();
-            }
 
-            // Record point-in-time observation entry
-            db.insert(leadObservations)
-              .values({
-                id: crypto.randomUUID(),
-                leadId,
-                scanId,
-                observedRating: filterResult.rating,
-                observedReviewCount: filterResult.reviewCount,
-                observedWebsiteUrl: effectiveWebsiteUrl,
-                observedPhone: effectivePhone,
-                observedAt: now,
-              })
-              .run();
+              // 6. Authoritative Observation Count Synchronization from Ledger
+              const authoritativeCount = tx
+                .select({ count: sql<number>`count(*)` })
+                .from(leadObservations)
+                .where(eq(leadObservations.leadId, targetLeadId))
+                .get()?.count ?? 1;
+
+              tx.update(leads)
+                .set({ observationCount: authoritativeCount })
+                .where(eq(leads.id, targetLeadId))
+                .run();
+            });
+
+            qualifiedCount++;
           })
         );
 

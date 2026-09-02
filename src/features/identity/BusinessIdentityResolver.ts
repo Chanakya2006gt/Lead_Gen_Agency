@@ -89,4 +89,40 @@ export class BusinessIdentityResolver {
 
     return this.buildDeterministicId(inputs.name, inputs.formattedAddress, inputs.phone);
   }
+
+  /**
+   * Secondary Entity Linking across disparate scrapers / adapters:
+   * 1. Exact Canonical Place ID match
+   * 2. Phone Match (last 10 digits) + Name prefix similarity match
+   */
+  public static findMatchingLead(
+    inputs: IdentityInputs,
+    existingLeads: Array<{ id: string; placeId: string; name: string; phone: string | null; formattedAddress: string | null }>
+  ): { id: string; placeId: string } | null {
+    const canonicalId = this.resolveId(inputs);
+
+    // 1. Exact Place ID match
+    const exact = existingLeads.find((l) => l.placeId === canonicalId);
+    if (exact) return exact;
+
+    // 2. Secondary Link: Phone Number + Name Similarity
+    const rawDigits = (inputs.phone || "").replace(/\D+/g, "");
+    const cleanPhone = rawDigits.length >= 10 ? rawDigits.slice(-10) : "";
+
+    if (cleanPhone) {
+      const phoneMatch = existingLeads.find((l) => {
+        const existingDigits = (l.phone || "").replace(/\D+/g, "");
+        const existingCleanPhone = existingDigits.length >= 10 ? existingDigits.slice(-10) : "";
+        if (!existingCleanPhone || existingCleanPhone !== cleanPhone) return false;
+
+        const normIncoming = inputs.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        const normExisting = l.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+        return normIncoming.includes(normExisting.slice(0, 5)) || normExisting.includes(normIncoming.slice(0, 5));
+      });
+
+      if (phoneMatch) return phoneMatch;
+    }
+
+    return null;
+  }
 }
