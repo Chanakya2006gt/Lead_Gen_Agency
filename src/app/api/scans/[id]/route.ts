@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/core/db";
 import { discoveryScans, leads } from "@/core/db/schema";
 import { verifyApiAccess } from "@/core/auth/verifyAccess";
+import { ScanPipelineService } from "@/features/pipeline/ScanPipelineService";
 import { eq, desc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -55,10 +56,14 @@ export async function DELETE(
     const params = await props.params;
     const scanId = params.id;
 
-    // Delete leads associated with this scan
-    db.delete(leads).where(eq(leads.scanId, scanId)).run();
-    // Delete the scan record
-    db.delete(discoveryScans).where(eq(discoveryScans.id, scanId)).run();
+    // 1. Immediately cancel background crawling and audit workers
+    await ScanPipelineService.cancelScan(scanId);
+
+    // 2. Safely remove leads and scan within an atomic transaction
+    db.transaction((tx) => {
+      tx.delete(leads).where(eq(leads.scanId, scanId)).run();
+      tx.delete(discoveryScans).where(eq(discoveryScans.id, scanId)).run();
+    });
 
     return NextResponse.json({
       success: true,

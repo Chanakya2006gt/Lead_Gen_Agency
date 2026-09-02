@@ -63,11 +63,16 @@ export class ScanPipelineService {
 
     // 2. Launch background execution asynchronously
     this.runPipelineJob(scanId, options).catch((err) => {
-      console.error(`Pipeline job failed for scan ${scanId}:`, err);
-      db.update(discoveryScans)
-        .set({ status: "FAILED" })
-        .where(eq(discoveryScans.id, scanId))
-        .run();
+      const isAborted = this.activeControllers.get(scanId)?.signal.aborted;
+      if (!isAborted) {
+        console.error(`Pipeline job failed for scan ${scanId}:`, err);
+        try {
+          db.update(discoveryScans)
+            .set({ status: "FAILED" })
+            .where(eq(discoveryScans.id, scanId))
+            .run();
+        } catch {}
+      }
     });
 
     return scanId;
@@ -216,6 +221,17 @@ export class ScanPipelineService {
             // Database Invariant -> Atomic Transaction -> Immutable Observation -> Derived Authoritative State
             // =========================================================================
             db.transaction((tx) => {
+              // 0. Safety Guard: Check if scan still exists (user might have deleted it during run)
+              const scanRow = tx
+                .select({ id: discoveryScans.id })
+                .from(discoveryScans)
+                .where(eq(discoveryScans.id, scanId))
+                .get();
+
+              if (!scanRow || abortController.signal.aborted) {
+                return; // Gracefully abort write
+              }
+
               // 1. Fetch existing lead record
               let existingLead = tx.select().from(leads).where(eq(leads.placeId, placeId)).get();
 
@@ -410,21 +426,25 @@ export class ScanPipelineService {
           })
         );
 
-        // Update running qualified count on scan record after each batch
+        // Update running qualified count on scan record after each batch if not aborted
+        if (!abortController.signal.aborted) {
+          db.update(discoveryScans)
+            .set({ qualifiedCount })
+            .where(eq(discoveryScans.id, scanId))
+            .run();
+        }
+      }
+
+      // Mark scan as COMPLETED if not cancelled/aborted
+      if (!abortController.signal.aborted) {
         db.update(discoveryScans)
-          .set({ qualifiedCount })
+          .set({
+            status: "COMPLETED",
+            qualifiedCount,
+          })
           .where(eq(discoveryScans.id, scanId))
           .run();
       }
-
-      // Mark scan as COMPLETED
-      db.update(discoveryScans)
-        .set({
-          status: "COMPLETED",
-          qualifiedCount,
-        })
-        .where(eq(discoveryScans.id, scanId))
-        .run();
     } finally {
       this.activeControllers.delete(scanId);
       await auditEngine.close();
