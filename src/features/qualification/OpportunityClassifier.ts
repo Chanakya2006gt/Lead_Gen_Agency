@@ -1,40 +1,75 @@
 import { AuditTelemetry, OpportunityType } from "@/core/db/schema";
+import { BusinessModelClassifier } from "@/features/commercial/BusinessModelClassifier";
 
 export interface ClassifierInputs {
   hasWebsite: boolean;
   isGbpDisconnected?: boolean;
-  reviewCount: number;
-  rating: number;
+  reviewCount?: number | null;
+  rating?: number | null;
   auditTelemetry?: AuditTelemetry | null;
   category?: string;
+  name?: string;
+  domain?: string;
+  websiteTextSnippet?: string | null;
 }
 
 export class OpportunityClassifier {
   public static classify(inputs: ClassifierInputs): OpportunityType {
     const { hasWebsite, isGbpDisconnected, reviewCount, auditTelemetry } = inputs;
 
-    // Rule 0: Disconnected Official Website -> Google Business Profile Reconnection Opportunity
+    // 1. Establish Business Model Context & Workflow Relevance
+    const classification = BusinessModelClassifier.classify({
+      name: inputs.name || "",
+      category: inputs.category,
+      domain: inputs.domain,
+      findings: auditTelemetry?.findings || [],
+      websiteTextSnippet: inputs.websiteTextSnippet,
+    });
+
+    const { model, relevantWorkflows } = classification;
+
+    // 2. Disconnected Google Business Profile (Relevant for all local/operating entities except global SaaS)
     if (isGbpDisconnected) {
-      return "DISCONNECTED_GBP_WEBSITE";
+      if (model !== "B2B_SAAS_TECH") {
+        return "DISCONNECTED_GBP_WEBSITE";
+      }
     }
 
-    // Rule 1: No Website -> Instant Website Opportunity
+    // 3. Zero Website
     if (!hasWebsite || !auditTelemetry) {
       return "WEBSITE";
     }
 
-    // Rule 2: Major structural UX/Viewport failures -> Full Website Rebuild
+    // 4. Critical Technical Failures (Always universally relevant across all models)
     if (!auditTelemetry.viewportMetaPresent || auditTelemetry.hasHorizontalOverflow || !auditTelemetry.hasSsl) {
       return "WEBSITE";
     }
 
-    // Rule 3: High Volume Operator (>250 reviews) with WhatsApp or no web scheduling -> Custom Ops Software
-    if (reviewCount >= 250 && (auditTelemetry.hasWhatsAppDirectLink || !auditTelemetry.hasInteractiveBookingForm)) {
-      return "CUSTOM_OPERATIONAL_SOFTWARE";
+    // 5. Custom Software Opportunities (High volume with observed WhatsApp traffic or scheduling bottlenecks)
+    const hasHighVolume = typeof reviewCount === "number" && reviewCount !== null && reviewCount >= 250;
+
+    if (hasHighVolume) {
+      if (auditTelemetry.hasWhatsAppDirectLink) {
+        return "CUSTOM_OPERATIONAL_SOFTWARE";
+      }
+      if (relevantWorkflows.appointmentBooking && !auditTelemetry.hasInteractiveBookingForm) {
+        return "CUSTOM_OPERATIONAL_SOFTWARE";
+      }
+      if (model === "B2B_SAAS_TECH" || model === "B2B_INDUSTRIAL_MANUFACTURING") {
+        return "CUSTOM_OPERATIONAL_SOFTWARE";
+      }
     }
 
-    // Rule 4: Modern site but missing interactive intake / direct click-to-call -> Website Automation
-    if (!auditTelemetry.hasInteractiveBookingForm || !auditTelemetry.hasDirectClickToCall) {
+    // 6. Workflow Automation (Only when missing capability is relevant to the business model)
+    if (model === "LOCAL_APPOINTMENT_SERVICE") {
+      if (!auditTelemetry.hasInteractiveBookingForm || !auditTelemetry.hasDirectClickToCall) {
+        return "WEBSITE_AUTOMATION";
+      }
+    } else if (model === "B2B_INDUSTRIAL_MANUFACTURING") {
+      return "WEBSITE_AUTOMATION";
+    } else if (model === "ECOMMERCE_D2C") {
+      return "WEBSITE_AUTOMATION";
+    } else if (model === "B2B_SAAS_TECH") {
       return "WEBSITE_AUTOMATION";
     }
 

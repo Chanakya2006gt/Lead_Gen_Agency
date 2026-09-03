@@ -1,8 +1,8 @@
 import { AuditTelemetry, ReviewTrend, OpportunityType } from "@/core/db/schema";
 
 export interface ScoringInputs {
-  rating: number;
-  reviewCount: number;
+  rating?: number | null;
+  reviewCount?: number | null;
   reviewTrend: ReviewTrend;
   reviewsLast30Days?: number | null;
   reviewsLast90Days?: number | null;
@@ -23,9 +23,15 @@ export class ScoringEngine {
   /**
    * 1. Reputation Score (S_rep)
    * Base rating normalized + Volume bonus + Recency multiplier
+   * Handles unverified / null ratings without manufacturing values
    */
   public static calculateReputationScore(inputs: ScoringInputs): number {
     const { rating, reviewCount, reviewTrend } = inputs;
+
+    // Handle Unverified / Direct URL Audits
+    if (rating === null || typeof rating !== "number" || reviewCount === null || typeof reviewCount !== "number") {
+      return 50; // Neutral baseline for unverified Google entity
+    }
 
     // Rating Score (0 to 50 pts): Maps 4.0 -> 30 pts, 5.0 -> 50 pts
     const ratingScore = Math.min(50, Math.max(0, ((rating - 3.5) / 1.5) * 50));

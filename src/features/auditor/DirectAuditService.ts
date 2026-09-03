@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import { PlaywrightAuditEngine } from "./PlaywrightAuditEngine";
 import { DossierSynthesizer } from "@/features/synthesis/DossierSynthesizer";
-import { AuditTelemetry, Lead } from "@/core/db/schema";
+import { AuditTelemetry, Lead, GoogleEvidence } from "@/core/db/schema";
 import { db } from "@/core/db";
 import { leads, discoveryScans } from "@/core/db/schema";
 import dns from "dns/promises";
@@ -138,20 +138,36 @@ export class DirectAuditService {
       categoryConfidence = deduced.confidence;
     }
 
-    // 3. Synthesize Commercial Profile & Sales Intelligence Dossier
+    // 3. Factual Google Evidence (Strictly NOT_VERIFIED for direct URL audits without Google Place lookup)
+    const googleEvidence: GoogleEvidence = {
+      status: "NOT_VERIFIED",
+      placeId: null,
+      googleMapsUrl: null,
+      rating: null,
+      reviewCount: null,
+      primaryType: null,
+      primaryTypeDisplayName: null,
+      source: "NONE",
+      retrievedAt: new Date().toISOString(),
+    };
+
+    // 4. Synthesize Commercial Profile & Sales Intelligence Dossier
     const dossier = await DossierSynthesizer.synthesize({
       name: businessName,
       category,
-      rating: 4.8, // Default strong market baseline for direct ad-hoc inspection
-      reviewCount: 120,
-      reviewTrend: "GROWING",
+      rating: null, // NO FABRICATION: Direct URL audits do not invent Google ratings
+      reviewCount: null, // NO FABRICATION: Direct URL audits do not invent Google review counts
+      reviewTrend: "UNKNOWN",
       hasWebsite: true,
       websiteUrl: validatedUrl,
       formattedAddress: location,
       auditTelemetry,
+      googleEvidence,
+      categorySource,
+      categoryConfidence,
     });
 
-    // 4. Construct In-Memory / Ephemeral Lead Object
+    // 5. Construct In-Memory / Ephemeral Lead Object with Nullable Unverified Data
     const now = new Date().toISOString();
     const leadId = `direct_${crypto.randomBytes(6).toString("hex")}`;
     const placeId = `direct_place_${crypto.randomBytes(8).toString("hex")}`;
@@ -171,15 +187,16 @@ export class DirectAuditService {
       websiteUrl: validatedUrl,
       gbpWebsiteUrl: validatedUrl,
       unlinkedWebsiteUrl: null,
-      rating: 4.8,
-      reviewCount: 120,
+      rating: null, // Strictly null: no unverified number
+      reviewCount: null, // Strictly null: no unverified number
       previousRating: null,
       previousReviewCount: null,
       lastReviewDate: null,
       reviewsLast30Days: null,
       reviewsLast90Days: null,
       reviewsLast180Days: null,
-      reviewTrend: "GROWING",
+      reviewTrend: "UNKNOWN",
+      ratingSource: "UNVERIFIED",
       auditStatus: "COMPLETED",
       auditTelemetry,
       reputationScore: dossier.reputationScore,
@@ -190,6 +207,7 @@ export class DirectAuditService {
       leadAttractivenessScore: dossier.commercialProfile?.leadAttractivenessScore ?? 70,
       totalLeadScore: dossier.overallLeadScore,
       opportunityType: dossier.opportunityType,
+      disposition: dossier.disposition || "NOT_A_FIT",
       dossier,
       humanStatus: "NEW",
       firstObservedAt: now,

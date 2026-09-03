@@ -78,8 +78,8 @@ export function LeadMatrixTable({
         return true;
       })
       .sort((a, b) => {
-        if (sortBy === "reviews") return b.reviewCount - a.reviewCount;
-        if (sortBy === "rating") return b.rating - a.rating;
+        if (sortBy === "reviews") return (b.reviewCount ?? -1) - (a.reviewCount ?? -1);
+        if (sortBy === "rating") return (b.rating ?? -1) - (a.rating ?? -1);
         return (b.totalLeadScore ?? 0) - (a.totalLeadScore ?? 0);
       });
   }, [leads, searchQuery, opportunityFilter, websiteFilter, sortBy]);
@@ -327,18 +327,29 @@ export function LeadMatrixTable({
 
                         {/* 4. Reputation & Longitudinal Demand */}
                         <td className="py-3.5 px-4 font-mono">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-amber-400 font-bold">★ {lead.rating.toFixed(1)}</span>
-                            <span className="text-slate-400 text-xs">({lead.reviewCount} reviews)</span>
-                          </div>
-                          {(lead.reviewCountDelta ?? 0) > 0 ? (
-                            <span className="text-[10px] text-emerald-400 font-medium block mt-0.5">
-                              +{lead.reviewCountDelta} gained
-                            </span>
+                          {typeof lead.rating === "number" && lead.rating !== null && typeof lead.reviewCount === "number" && lead.reviewCount !== null ? (
+                            <>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-amber-400 font-bold">★ {lead.rating.toFixed(1)}</span>
+                                <span className="text-slate-400 text-xs">({lead.reviewCount} reviews)</span>
+                              </div>
+                              {(lead.reviewCountDelta ?? 0) > 0 ? (
+                                <span className="text-[10px] text-emerald-400 font-medium block mt-0.5">
+                                  +{lead.reviewCountDelta} gained
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-500 block mt-0.5">
+                                  Velocity: {lead.reviewTrend}
+                                </span>
+                              )}
+                            </>
                           ) : (
-                            <span className="text-[10px] text-slate-500 block mt-0.5">
-                              Velocity: {lead.reviewTrend}
-                            </span>
+                            <div className="text-[11px] font-mono">
+                              <span className="px-2 py-0.5 rounded bg-slate-800/70 border border-white/[0.08] text-slate-400 text-[10px]">
+                                Unverified Google
+                              </span>
+                              <span className="text-[10px] text-slate-500 block mt-1">Direct Web Audit</span>
+                            </div>
                           )}
                         </td>
 

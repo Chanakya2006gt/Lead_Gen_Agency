@@ -25,14 +25,19 @@ export function DashboardClient() {
     try {
       const res = await fetch("/api/scans");
       if (res.ok) {
-        const data = await res.json();
-        setScans(data.scans || []);
-        setActiveScanId((current) => {
-          if (!current && data.scans?.length > 0) {
-            return data.scans[0].id;
-          }
-          return current;
-        });
+        const text = await res.text();
+        try {
+          const data = JSON.parse(text);
+          setScans(data.scans || []);
+          setActiveScanId((current) => {
+            if (!current && data.scans?.length > 0) {
+              return data.scans[0].id;
+            }
+            return current;
+          });
+        } catch {
+          // Non-JSON response
+        }
       }
     } catch (err) {
       console.error("Error fetching scans:", err);
@@ -45,14 +50,19 @@ export function DashboardClient() {
     try {
       const res = await fetch(`/api/scans/${scanId}`);
       if (res.ok) {
-        const data = await res.json();
-        setActiveScan(data.scan);
-        setLeads(data.leads || []);
+        const text = await res.text();
+        try {
+          const data = JSON.parse(text);
+          setActiveScan(data.scan);
+          setLeads(data.leads || []);
 
-        if (data.scan?.status === "RUNNING") {
-          setIsScanning(true);
-        } else {
-          setIsScanning(false);
+          if (data.scan?.status === "RUNNING") {
+            setIsScanning(true);
+          } else {
+            setIsScanning(false);
+          }
+        } catch {
+          // Non-JSON response
         }
       }
     } catch (err) {
@@ -182,15 +192,16 @@ export function DashboardClient() {
 
   return (
     <div className="min-h-screen bg-[#070A10] flex flex-col text-slate-100 relative selection:bg-indigo-500 selection:text-white">
-      {/* Prominent Atmospheric Background Wallpaper Layer */}
+      {/* Prominent High-Contrast Atmospheric Background Wallpaper Layer */}
       <div className="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
         <img
           src="/assets/hero-bg.jpg"
           alt="Atmospheric Background"
-          className="w-full h-full object-cover object-[center_25%] opacity-95 contrast-120 brightness-110"
+          className="w-full h-full object-cover object-[center_20%] opacity-100 contrast-[1.3] brightness-[1.25] saturate-[1.15]"
         />
-        {/* Subtle Ambient Vignette */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/60" />
+        {/* Cinematic Rim Glow and Ambient Lighting Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#070A10]/70 via-transparent to-black/20 pointer-events-none" />
+        <div className="absolute inset-0 bg-radial-[circle_at_50%_30%] from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
       </div>
 
       {/* Navigation Header */}

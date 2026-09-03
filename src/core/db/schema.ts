@@ -6,6 +6,7 @@ export * from "@/features/commercial/types";
 export type ReviewTrend = "GROWING" | "STABLE" | "DECLINING" | "STALE" | "UNKNOWN";
 export type OpportunityType = "WEBSITE" | "WEBSITE_AUTOMATION" | "CUSTOM_OPERATIONAL_SOFTWARE" | "DISCONNECTED_GBP_WEBSITE" | "UNKNOWN";
 export type HumanStatus = "NEW" | "REVIEWED" | "READY_FOR_OUTREACH" | "ARCHIVED";
+export type LeadDisposition = "PURSUE" | "LOW_OPPORTUNITY" | "NOT_A_FIT" | "INSUFFICIENT_EVIDENCE";
 
 export interface AuditFinding {
   category: "technical" | "ux" | "conversion" | "operational";
@@ -29,11 +30,35 @@ export interface AuditTelemetry {
 }
 
 export interface SignalProvenance {
-  ratingConfidence: "high" | "medium" | "low";
+  ratingConfidence: "high" | "medium" | "low" | "none";
   reviewVelocityConfidence: "observed" | "longitudinal" | "unknown";
-  identityConfidence: "google_verified" | "deterministic";
+  identityConfidence: "google_verified" | "deterministic" | "direct_audit";
   auditConfidence: "empirical" | "pending";
 }
+
+export type GoogleEvidence =
+  | {
+      status: "VERIFIED";
+      placeId: string;
+      googleMapsUrl: string;
+      rating: number | null;
+      reviewCount: number | null;
+      primaryType?: string;
+      primaryTypeDisplayName?: string;
+      source: "GOOGLE_PLACES" | "GOOGLE_MAPS_DOM" | "APIFY" | "SERPAPI";
+      retrievedAt: string;
+    }
+  | {
+      status: "NOT_VERIFIED";
+      placeId?: string | null;
+      googleMapsUrl?: string | null;
+      rating: null;
+      reviewCount: null;
+      primaryType?: string | null;
+      primaryTypeDisplayName?: string | null;
+      source: "UNVERIFIED" | "NONE";
+      retrievedAt?: string;
+    };
 
 export interface BusinessDossier {
   reputationScore: number;
@@ -42,6 +67,7 @@ export interface BusinessDossier {
   confidenceScore: number;
   overallLeadScore: number;
   opportunityType: OpportunityType;
+  disposition?: LeadDisposition;
   hasWebsite?: boolean;
   hasGbpWebsiteLink?: boolean;
   isGbpDisconnected?: boolean;
@@ -51,6 +77,7 @@ export interface BusinessDossier {
   identifiedStrengths: string[];
   identifiedBottlenecks: string[];
   provenance?: SignalProvenance;
+  googleEvidence?: GoogleEvidence;
   discoveryNiche?: string;
   discoveryQuery?: string;
   googlePrimaryType?: string;
@@ -62,9 +89,12 @@ export interface BusinessDossier {
     suggestedScope: string;
     identifiedBottlenecks: string[];
     estimatedValueRange: string;
+    outreachAllowed?: boolean;
+    dispositionReason?: string;
   };
   executiveSummary: string;
   commercialProfile?: CommercialProfile;
+  qualification?: any;
 }
 
 // =========================================================================
@@ -100,9 +130,9 @@ export const leads = sqliteTable("leads", {
   gbpWebsiteUrl: sqliteText("gbp_website_url"),
   unlinkedWebsiteUrl: sqliteText("unlinked_website_url"),
 
-  // Longitudinal Reputation Tracking
-  rating: sqliteReal("rating").notNull(),
-  reviewCount: sqliteInteger("review_count").notNull(),
+  // Longitudinal Reputation Tracking (Strictly Nullable when unverified)
+  rating: sqliteReal("rating"),
+  reviewCount: sqliteInteger("review_count"),
   previousRating: sqliteReal("previous_rating"),
   previousReviewCount: sqliteInteger("previous_review_count"),
   lastReviewDate: sqliteText("last_review_date"),
@@ -110,6 +140,7 @@ export const leads = sqliteTable("leads", {
   reviewsLast90Days: sqliteInteger("reviews_last_90_days"),
   reviewsLast180Days: sqliteInteger("reviews_last_180_days"),
   reviewTrend: sqliteText("review_trend").$type<ReviewTrend>().notNull().default("UNKNOWN"),
+  ratingSource: sqliteText("rating_source").default("UNVERIFIED"),
   
   // Technical Audit State
   auditStatus: sqliteText("audit_status").notNull().default("PENDING"),
@@ -124,6 +155,7 @@ export const leads = sqliteTable("leads", {
   leadAttractivenessScore: sqliteInteger("lead_attractiveness_score").default(0),
   totalLeadScore: sqliteInteger("total_lead_score").default(0),
   opportunityType: sqliteText("opportunity_type").$type<OpportunityType>().notNull().default("UNKNOWN"),
+  disposition: sqliteText("disposition").$type<LeadDisposition>().notNull().default("PURSUE"),
   dossier: sqliteText("dossier", { mode: "json" }).$type<BusinessDossier>(),
   humanStatus: sqliteText("human_status").$type<HumanStatus>().notNull().default("NEW"),
   
@@ -142,8 +174,8 @@ export const leadObservations = sqliteTable("lead_observations", {
   id: sqliteText("id").primaryKey(),
   leadId: sqliteText("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
   scanId: sqliteText("scan_id").references(() => discoveryScans.id, { onDelete: "set null" }),
-  observedRating: sqliteReal("observed_rating").notNull(),
-  observedReviewCount: sqliteInteger("observed_review_count").notNull(),
+  observedRating: sqliteReal("observed_rating"),
+  observedReviewCount: sqliteInteger("observed_review_count"),
   observedWebsiteUrl: sqliteText("observed_website_url"),
   observedPhone: sqliteText("observed_phone"),
   observedAt: sqliteText("observed_at").notNull(),

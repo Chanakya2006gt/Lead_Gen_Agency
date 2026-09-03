@@ -13,11 +13,12 @@ export function ExecutiveMetrics({ leads }: ExecutiveMetricsProps) {
   const unlinkedGbpCount = leads.filter((l) => l.isGbpDisconnected).length;
   const noWebsiteCount = leads.filter((l) => !l.hasWebsite && !l.isGbpDisconnected).length;
 
-  const avgRating = totalQualified > 0
-    ? (leads.reduce((sum, l) => sum + (l.rating || 0), 0) / totalQualified).toFixed(1)
-    : "0.0";
+  const verifiedLeads = leads.filter((l) => typeof l.rating === "number" && l.rating !== null);
+  const avgRating = verifiedLeads.length > 0
+    ? (verifiedLeads.reduce((sum, l) => sum + (l.rating || 0), 0) / verifiedLeads.length).toFixed(1)
+    : "—";
 
-  const totalReviews = leads.reduce((sum, l) => sum + (l.reviewCount || 0), 0);
+  const totalReviews = verifiedLeads.reduce((sum, l) => sum + (l.reviewCount || 0), 0);
 
   // Grounded Indian freelance & agency rates (INR)
   const estimatedPipelineValueINR = leads.reduce((sum, l) => {

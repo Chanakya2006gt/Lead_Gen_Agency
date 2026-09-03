@@ -107,8 +107,13 @@ export function ScanLauncher({
       try {
         const res = await fetch(`/api/discovery/suggestions?location=${encodeURIComponent(location.trim())}`);
         if (res.ok) {
-          const data = await res.json();
-          setMarketSuggestions(data.suggestions || []);
+          const text = await res.text();
+          try {
+            const data = JSON.parse(text);
+            setMarketSuggestions(data.suggestions || []);
+          } catch {
+            // Non-JSON response
+          }
         }
       } catch {
         // Fallback
@@ -136,22 +141,28 @@ export function ScanLauncher({
           const lng = pos.coords.longitude;
 
           const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10`,
+            { headers: { Accept: "application/json" } }
           );
           if (res.ok) {
-            const data = await res.json();
-            const address = data.address || {};
-            const city =
-              address.city ||
-              address.town ||
-              address.village ||
-              address.county ||
-              address.state_district ||
-              "Detected City";
-            const state = address.state || "";
-            const country = address.country || "";
-            const fullLoc = [city, state, country].filter(Boolean).join(", ");
-            setLocation(fullLoc);
+            const text = await res.text();
+            try {
+              const data = JSON.parse(text);
+              const address = data.address || {};
+              const city =
+                address.city ||
+                address.town ||
+                address.village ||
+                address.county ||
+                address.state_district ||
+                "Detected City";
+              const state = address.state || "";
+              const country = address.country || "";
+              const fullLoc = [city, state, country].filter(Boolean).join(", ");
+              setLocation(fullLoc);
+            } catch {
+              setLocation(getInitialCityFromTimezone());
+            }
           } else {
             setLocation(`${lat.toFixed(4)}, ${lng.toFixed(4)}`);
           }
@@ -182,10 +193,15 @@ export function ScanLauncher({
           `/api/places/autocomplete?input=${encodeURIComponent(location.trim())}`
         );
         if (res.ok) {
-          const data = await res.json();
-          setPredictions(data.predictions || []);
-          if (isFocused && data.predictions?.length > 0) {
-            setShowDropdown(true);
+          const text = await res.text();
+          try {
+            const data = JSON.parse(text);
+            setPredictions(data.predictions || []);
+            if (isFocused && data.predictions?.length > 0) {
+              setShowDropdown(true);
+            }
+          } catch {
+            // Non-JSON response
           }
         }
       } catch {
@@ -233,12 +249,18 @@ export function ScanLauncher({
         }),
       });
 
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to launch scan");
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Server returned non-JSON response (${res.status}).`);
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || `Failed to launch scan (${res.status})`);
+      }
+
       onScanLaunched(data.scanId);
     } catch (err: any) {
       setErrorMessage(err.message);
@@ -265,12 +287,18 @@ export function ScanLauncher({
         }),
       });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || "Failed to audit website");
+      const text = await res.text();
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Server returned non-JSON response (${res.status}).`);
       }
 
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.error || `Failed to audit website (${res.status})`);
+      }
+
       if (onDirectAuditCompleted && data.lead) {
         onDirectAuditCompleted(data.lead);
       }

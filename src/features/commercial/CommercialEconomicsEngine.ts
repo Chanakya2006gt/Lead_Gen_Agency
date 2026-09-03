@@ -12,8 +12,8 @@ import { AuditTelemetry } from "@/core/db/schema";
 export interface CommercialAnalysisParams {
   name: string;
   category?: string | null;
-  rating: number;
-  reviewCount: number;
+  rating?: number | null;
+  reviewCount?: number | null;
   locationInput?: string | null;
   formattedAddress?: string | null;
   hasWebsite: boolean;

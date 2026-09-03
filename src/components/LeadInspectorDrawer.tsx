@@ -1,135 +1,192 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Lead, HumanStatus, BusinessDossier } from "@/core/db/schema";
-import { ScoreGauge } from "./ScoreGauge";
+import React, { useState } from "react";
 import {
   X,
   Copy,
   Check,
   ExternalLink,
-  MapPin,
   Phone,
+  MapPin,
   Globe,
-  Send,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Unlink,
-  Sparkles,
-  ShieldCheck,
-  ShieldAlert,
-  Smartphone,
-  Calendar,
-  Layers,
-  ArrowRight,
+  Star,
+  Zap,
   TrendingUp,
+  FileCode,
+  Sparkles,
+  Unlink,
+  ShieldCheck,
 } from "lucide-react";
+import { Lead } from "@/core/db/schema";
+import { ScoreGauge } from "./ScoreGauge";
+import { OutreachClaimValidator } from "@/features/synthesis/OutreachClaimValidator";
+import { BusinessModelClassifier } from "@/features/commercial/BusinessModelClassifier";
 
 interface LeadInspectorDrawerProps {
   lead: Lead | null;
   onClose: () => void;
-  onStatusChange: (leadId: string, status: HumanStatus) => Promise<void>;
+  onStatusChange?: (leadId: string, status: any) => Promise<void>;
+  onUpdateStatus?: (leadId: string, status: string) => Promise<void>;
 }
 
-export function LeadInspectorDrawer({ lead, onClose, onStatusChange }: LeadInspectorDrawerProps) {
+export function LeadInspectorDrawer({
+  lead,
+  onClose,
+  onStatusChange,
+  onUpdateStatus,
+}: LeadInspectorDrawerProps) {
+  const [activeTab, setActiveTab] = useState<"whatsapp" | "email" | "phone" | "scope">("whatsapp");
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"email" | "whatsapp" | "phone" | "scope">("email");
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-
-  // Close on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
 
   if (!lead) return null;
 
-  const dossier: BusinessDossier | null = (lead.dossier as any) || null;
-  const telemetry = (lead.auditTelemetry as any) || null;
-  const pitch = dossier?.recommendedPitch;
-  const commercial = dossier?.commercialProfile;
+  const dossier = (lead.dossier as any) || {};
+  const pitch = dossier.recommendedPitch || {};
+  const commercial = dossier.commercialProfile;
+  const telemetry = lead.auditTelemetry;
 
   const founderName = process.env.NEXT_PUBLIC_AGENCY_FOUNDER_NAME || "Chanakya";
-  const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME || "Agency Operations";
+  const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME || "Agency Growth Partners";
+  const cleanPhone = (lead.phone || "").replace(/[^0-9+]/g, "");
 
-  const cleanPhone = lead.phone ? lead.phone.replace(/[^0-9+]/g, "") : "";
-  const displayDomain = (lead.unlinkedWebsiteUrl || lead.websiteUrl || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const displayDomain = lead.unlinkedWebsiteUrl
+    ? lead.unlinkedWebsiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
+    : lead.websiteUrl
+    ? lead.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
+    : "No Website";
 
-  // Clean estimated value string (strips legacy USD/Int'l tags if present in cached DB records)
-  const displayEstimatedValue = (pitch?.estimatedValueRange || "₹18,000 – ₹35,000 (Market Fit)")
-    .replace(/\s*\/\s*\$[\d,–\s]+(?:\s*Int'l)?/gi, "")
-    .replace(/\s*\(Target Scope Benchmark\)/gi, "")
-    .trim();
+  // Dynamic INR / USD Formatting
+  const buildOffer = commercial?.recommendedBuildOffer;
+  const careOffer = commercial?.recommendedMonthlyCare;
+  const isINR = buildOffer?.currency === "INR";
+  const curSym = isINR ? "₹" : "$";
 
-  // Dynamic Synthesis for "WHY THIS LEAD"
-  const whyPoints: string[] = [];
-  if (lead.isGbpDisconnected && lead.unlinkedWebsiteUrl) {
-    whyPoints.push(`Official website (${displayDomain}) exists online but is disconnected from Google Maps profile, suppressing 3-pack local search rankings.`);
-    whyPoints.push("High-intent mobile searchers looking up your Google Maps profile cannot access treatments or book online.");
+  const displayEstimatedValue = buildOffer && careOffer
+    ? `${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")} – ${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} Build + ${curSym}${careOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${careOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")}/mo (${commercial.feasibleOfferWindow.status === "DOWN_SCOPED" ? "Lean MVP" : "Market Fit"})`
+    : pitch?.estimatedValueRange || `${curSym}18,000 – ${curSym}35,000`;
+
+  // Establish Typed Google Evidence Status
+  const isGoogleVerified =
+    typeof lead.rating === "number" &&
+    lead.rating !== null &&
+    typeof lead.reviewCount === "number" &&
+    lead.reviewCount !== null;
+
+  const googleEvidence = dossier.googleEvidence || (
+    isGoogleVerified
+      ? {
+          status: "VERIFIED" as const,
+          placeId: lead.placeId,
+          googleMapsUrl: lead.googleMapsUrl || "",
+          rating: lead.rating,
+          reviewCount: lead.reviewCount,
+          source: "GOOGLE_PLACES" as const,
+          retrievedAt: lead.createdAt,
+        }
+      : {
+          status: "NOT_VERIFIED" as const,
+          placeId: null,
+          googleMapsUrl: null,
+          rating: null,
+          reviewCount: null,
+          source: "NONE" as const,
+        }
+  );
+
+  // Establish Business Model Context & Workflow Relevance
+  const classification = BusinessModelClassifier.classify({
+    name: lead.name,
+    category: lead.category,
+    domain: displayDomain,
+    findings: telemetry?.findings || [],
+  });
+  const { model, relevantWorkflows } = classification;
+
+  // 1. Evidence-Backed Why Points (Strictly Filtered by Business Model Workflow Relevance)
+  const rawWhyPoints: string[] = [];
+  if (lead.isGbpDisconnected && lead.unlinkedWebsiteUrl && relevantWorkflows.localGbpSync) {
+    rawWhyPoints.push(`Official website (${displayDomain}) exists online but is disconnected from Google Maps profile, suppressing 3-pack local search rankings.`);
+    rawWhyPoints.push("High-intent mobile searchers looking up your Google Maps profile cannot access treatments or book online.");
   } else if (!lead.hasWebsite) {
-    whyPoints.push("Zero official website linked on Google Maps—leaking high-intent mobile searchers to competitors.");
-    whyPoints.push("Lacks direct digital intake, forcing all potential clients to call during business hours only.");
+    rawWhyPoints.push("Zero official website linked on Google Maps—leaking high-intent mobile searchers to competitors.");
+    rawWhyPoints.push("Lacks direct digital intake, forcing all potential clients to call during business hours only.");
   } else {
     if (telemetry && !telemetry.viewportMetaPresent) {
-      whyPoints.push("Mobile layout is desktop-only and unoptimized for touch smartphone users.");
+      rawWhyPoints.push("Mobile layout is desktop-only and unoptimized for touch smartphone users.");
     }
-    if (telemetry && !telemetry.hasDirectClickToCall && !telemetry.hasWhatsAppDirectLink) {
-      whyPoints.push("Missing direct 1-tap call or WhatsApp conversion trigger for mobile traffic.");
+    if (telemetry && telemetry.hasHorizontalOverflow) {
+      rawWhyPoints.push("Horizontal layout overflow disrupts mobile navigation on smartphone screens.");
+    }
+    // Only push WhatsApp if relevant to the business model (e.g. Clinics, Salons, Restaurants)
+    if (relevantWorkflows.whatsAppIntake && telemetry && !telemetry.hasDirectClickToCall && !telemetry.hasWhatsAppDirectLink) {
+      rawWhyPoints.push("Missing direct 1-tap call or WhatsApp conversion trigger for mobile traffic.");
+    }
+    // Only push Booking Form if relevant to the business model (e.g. Clinics, Spas, Law practices)
+    if (relevantWorkflows.appointmentBooking && telemetry && !telemetry.hasInteractiveBookingForm) {
+      rawWhyPoints.push("Missing automated online calendar booking or scheduling intake funnel.");
+    }
+    if (telemetry && !telemetry.hasSsl) {
+      rawWhyPoints.push("Security Warning: Insecure HTTP protocol without SSL certificate.");
     }
     if (telemetry && telemetry.initialLoadLatencyMs > 2500) {
-      whyPoints.push(`Slow initial load latency (${telemetry.initialLoadLatencyMs}ms)—hurting Google search rankings.`);
+      rawWhyPoints.push(`Slow initial load latency (${telemetry.initialLoadLatencyMs}ms)—hurting search rankings.`);
+    }
+    if (rawWhyPoints.length === 0 && telemetry?.findings && telemetry.findings.length > 0) {
+      rawWhyPoints.push(telemetry.findings[0].evidence);
     }
   }
 
-  whyPoints.push(`Strong established reputation: ${lead.rating.toFixed(1)}★ rating across ${lead.reviewCount} verified reviews demonstrates high customer demand and purchasing power.`);
-
-  // WhatsApp Hook Copy
-  const whatsappCopy = `Hi team ${lead.name}, I was reviewing your Google Maps listing (${lead.rating}★, ${lead.reviewCount} reviews) and noticed ${
-    lead.isGbpDisconnected
-      ? `your official website (${displayDomain}) isn't connected to your Maps profile, dropping your 3-pack patient rank.`
-      : !lead.hasWebsite
-      ? "you don't have a direct website/WhatsApp booking link on Maps for mobile visitors."
-      : "your mobile site has horizontal layout overflow that makes booking from phones difficult."
+  if (isGoogleVerified) {
+    rawWhyPoints.push(`Strong established reputation: ${lead.rating!.toFixed(1)}★ rating across ${lead.reviewCount} verified reviews demonstrates customer demand.`);
+  } else {
+    rawWhyPoints.push(`Direct web infrastructure audit: Comprehensive empirical UX & speed audit completed.`);
   }
 
-I put together a 2-minute video breakdown of how fixing this captures 15-25 more client inquiries a month. Can I share it here?
+  // 2. Draft Outreach Copy (Model & Workflow Aware)
+  const draftWhatsapp = isGoogleVerified && relevantWorkflows.whatsAppIntake
+    ? `Hi team ${lead.name}, I was reviewing your Google Maps listing (${lead.rating!.toFixed(1)}★, ${lead.reviewCount} reviews) and noticed ${
+        lead.isGbpDisconnected
+          ? `your official website (${displayDomain}) isn't connected to your Maps profile, dropping your 3-pack patient rank.`
+          : !lead.hasWebsite
+          ? "you don't have a direct website/WhatsApp booking link on Maps for mobile visitors."
+          : "your mobile site has horizontal layout overflow that makes booking from phones difficult."
+      }\n\nI put together a 2-minute video breakdown of how fixing this captures 15-25 more client inquiries a month. Can I share it here?\n\nBest,\n${founderName}`
+    : model === "B2B_SAAS_TECH"
+    ? `Hi team ${lead.name}, I was analyzing ${displayDomain} and noticed opportunities to streamline your mobile onboarding and product conversion funnel.\n\nI put together a 2-minute video walkthrough showing how fixing this improves sign-up velocity. Can I share it here?\n\nBest,\n${founderName}`
+    : model === "B2B_INDUSTRIAL_MANUFACTURING"
+    ? `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed opportunities to modernize your digital product catalog and Request-for-Quote (RFQ) pipeline.\n\nI put together a 2-minute video breakdown showing how this captures more buyer inquiries. Can I share it here?\n\nBest,\n${founderName}`
+    : model === "ECOMMERCE_D2C"
+    ? `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed opportunities to accelerate mobile checkout and storefront navigation.\n\nI put together a 2-minute video breakdown showing how this boosts conversion rates. Can I share it here?\n\nBest,\n${founderName}`
+    : `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed ${
+        telemetry && !telemetry.viewportMetaPresent
+          ? "your mobile site has desktop layout overflow that makes navigation difficult from phones."
+          : telemetry && !telemetry.hasSsl
+          ? "your domain lacks an active SSL security certificate, triggering browser trust warnings."
+          : "opportunities to optimize your mobile responsive layout and page load performance."
+      }\n\nI put together a 2-minute video breakdown of how resolving this improves visitor conversion. Can I share it here?\n\nBest,\n${founderName}`;
 
-Best,
-${founderName}`;
+  const draftEmail = isGoogleVerified && relevantWorkflows.localGbpSync
+    ? `Subject: Question regarding ${lead.name}'s Google Maps listing\n\nHi ${lead.name} Team,\n\nI came across ${lead.name} while researching top-rated ${lead.category || "service providers"} in ${lead.formattedAddress || "your city"}—congratulations on maintaining a ${lead.rating!.toFixed(1)}★ rating across ${lead.reviewCount} reviews.\n\nWhile analyzing your local digital footprint, I spotted a significant commercial bottleneck:\n\n${rawWhyPoints.map((p) => `• ${p}`).join("\n")}\n\nWe specialize in fixing these exact conversion leaks for established ${lead.category || "businesses"} without disrupting ongoing operations.\n\nWould you be open to a brief 5-minute Loom walkthrough showing exactly how we can resolve this for ${lead.name}?\n\nBest regards,\n\n${founderName}\n${agencyName}`
+    : `Subject: Technical observation regarding ${displayDomain}\n\nHi ${lead.name} Team,\n\nI was analyzing ${displayDomain} and spotted a significant commercial bottleneck affecting mobile visitor conversions:\n\n${rawWhyPoints.map((p) => `• ${p}`).join("\n")}\n\nWe specialize in fixing these exact conversion leaks without disrupting ongoing operations.\n\nWould you be open to a brief 5-minute Loom walkthrough showing exactly how we can resolve this for ${lead.name}?\n\nBest regards,\n\n${founderName}\n${agencyName}`;
 
-  // Cold Email Copy
-  const coldEmailCopy = `Subject: Question regarding ${lead.name}'s Google Maps listing
+  const draftPhone = isGoogleVerified && relevantWorkflows.localGbpSync
+    ? `Front-Desk Script for ${lead.name}:\nOperator: "Hi, I was looking up ${lead.name} on Google Maps—congratulations on the ${lead.rating!.toFixed(1)}★ rating with ${lead.reviewCount} reviews! \n\nI noticed a technical issue with your online booking and mobile setup where patients/clients might have trouble scheduling directly from their phones. \n\nWho is the practice manager or owner responsible for your digital operations so I can send over a quick 2-minute screenshot breakdown for them?"`
+    : `Front-Desk Script for ${lead.name}:\nOperator: "Hi, I was reviewing ${displayDomain} and noticed a technical issue with your mobile layout where visitors have trouble navigating from their phones. \n\nWho is the manager or owner responsible for your website operations so I can send over a quick 2-minute screenshot breakdown for them?"`;
 
-Hi ${lead.name} Team,
+  // 3. Domain-Level Outreach Claim Validation
+  const validatedOutreach = OutreachClaimValidator.validate({
+    name: lead.name,
+    category: lead.category,
+    domain: displayDomain,
+    googleEvidence,
+    coreAngle: pitch?.coreAngle || "Digital Infrastructure",
+    whatsappCopy: draftWhatsapp,
+    coldEmailCopy: draftEmail,
+    phoneScript: draftPhone,
+    whyPoints: rawWhyPoints,
+  });
 
-I came across ${lead.name} while researching top-rated ${lead.category || "service providers"} in ${lead.formattedAddress || "your city"}—congratulations on maintaining a ${lead.rating}★ rating across ${lead.reviewCount} reviews.
-
-While analyzing your local digital footprint, I spotted a significant commercial bottleneck:
-
-${whyPoints.map((p) => `• ${p}`).join("\n")}
-
-We specialize in fixing these exact conversion leaks for established ${lead.category || "businesses"} without disrupting ongoing operations.
-
-Would you be open to a brief 5-minute Loom walkthrough showing exactly how we can resolve this for ${lead.name}?
-
-Best regards,
-
-${founderName}
-${agencyName}`;
-
-  // Phone Gatekeeper Script
-  let phoneScript = `Front-Desk Script for ${lead.name}:
-Operator: "Hi, I was looking up ${lead.name} on Google Maps—congratulations on the ${lead.rating}★ rating with ${lead.reviewCount} reviews! 
-
-I noticed a technical issue with your online booking and mobile setup where patients/clients might have trouble scheduling directly from their phones. 
-
-Who is the practice manager or owner responsible for your digital operations so I can send over a quick 2-minute screenshot breakdown for them?"`;
-
-  // Technical Scope
   const scopeCopy = `[PROPOSED TECHNICAL SCOPE & DELIVERABLES]
 Project: ${lead.name} — ${pitch?.coreAngle || "Digital Architecture"}
 Target Scope Benchmark: ${displayEstimatedValue}
@@ -144,11 +201,11 @@ Deliverables:
   const getActiveCopyText = () => {
     switch (activeTab) {
       case "whatsapp":
-        return whatsappCopy;
+        return validatedOutreach.whatsappCopy;
       case "email":
-        return coldEmailCopy;
+        return validatedOutreach.coldEmailCopy;
       case "phone":
-        return phoneScript;
+        return validatedOutreach.phoneScript;
       case "scope":
         return scopeCopy;
     }
@@ -171,6 +228,21 @@ Deliverables:
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
                 {lead.category || "Operating Business"}
               </span>
+              {dossier?.disposition && (
+                <span
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                    dossier.disposition === "PURSUE"
+                      ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                      : dossier.disposition === "NOT_A_FIT"
+                      ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                      : dossier.disposition === "INSUFFICIENT_EVIDENCE"
+                      ? "bg-slate-500/10 text-slate-300 border-slate-500/30"
+                      : "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                  }`}
+                >
+                  {dossier.disposition.replace(/_/g, " ")}
+                </span>
+              )}
               {dossier?.categorySource && (
                 <span
                   className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-medium border ${
@@ -226,9 +298,15 @@ Deliverables:
             )}
 
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-2 font-mono">
-              <span className="text-amber-400 font-semibold">
-                ★ {lead.rating.toFixed(1)} <span className="text-slate-400 font-normal">({lead.reviewCount} Google reviews)</span>
-              </span>
+              {isGoogleVerified ? (
+                <span className="text-amber-400 font-semibold">
+                  ★ {lead.rating!.toFixed(1)} <span className="text-slate-400 font-normal">({lead.reviewCount} Google reviews)</span>
+                </span>
+              ) : (
+                <span className="text-slate-400 font-mono text-[11px] bg-slate-800/60 px-2 py-0.5 rounded border border-white/[0.08]">
+                  Direct URL Audit (Unlinked Google Place)
+                </span>
+              )}
               {lead.phone && (
                 <a
                   href={`tel:${cleanPhone}`}
@@ -266,7 +344,7 @@ Deliverables:
               Why This Lead (Commercial Thesis)
             </h3>
             <div className="p-3.5 rounded-lg bg-[#0A0D14] border border-white/[0.06] space-y-2 text-slate-300 leading-relaxed font-sans">
-              {whyPoints.map((pt, idx) => (
+              {validatedOutreach.whyPoints.map((pt, idx) => (
                 <div key={idx} className="flex items-start gap-2">
                   <span className="text-indigo-400 font-bold mt-0.5">•</span>
                   <span>{pt}</span>
@@ -292,262 +370,217 @@ Deliverables:
                       : "bg-slate-500/10 text-slate-300 border-slate-500/30"
                   }`}
                 >
-                  {commercial.pursuitAssessment.decision.replace(/_/g, " ")}
+                  {commercial.pursuitAssessment.decision}
                 </span>
               </div>
 
-              {/* Metric Grid */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px] font-mono">
-                <div className="p-2 rounded bg-black/40 border border-white/[0.06]">
-                  <span className="text-slate-400 block text-[10px]">Business Scale</span>
-                  <span className="text-white font-bold">{commercial.businessScale}</span>
+              {/* Economic Metrics Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono">
+                <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                  <div className="text-[10px] text-slate-500 uppercase">Est. Business Scale</div>
+                  <div className="text-xs font-bold text-slate-200 mt-0.5">{commercial.businessScale}</div>
                 </div>
-                <div className="p-2 rounded bg-black/40 border border-white/[0.06]">
-                  <span className="text-slate-400 block text-[10px]">Commercial Ceiling</span>
-                  <span className="text-indigo-300 font-bold">
-                    ₹{commercial.clientCommercialCeiling.max.toLocaleString("en-IN")} Max
-                  </span>
+
+                <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                  <div className="text-[10px] text-slate-500 uppercase">Commercial Ceiling</div>
+                  <div className="text-xs font-bold text-indigo-300 mt-0.5">
+                    {curSym}{commercial.clientCommercialCeiling.max.toLocaleString(isINR ? "en-IN" : "en-US")}
+                  </div>
                 </div>
-                <div className="p-2 rounded bg-black/40 border border-white/[0.06]">
-                  <span className="text-slate-400 block text-[10px]">Agency Delivery Floor</span>
-                  <span className="text-slate-200 font-bold">
-                    ₹{commercial.agencyDeliveryEconomics.minimumViableDeliveryPrice.min.toLocaleString("en-IN")} Floor
-                  </span>
+
+                <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                  <div className="text-[10px] text-slate-500 uppercase">Recommended Build</div>
+                  <div className="text-xs font-bold text-emerald-400 mt-0.5">
+                    {curSym}{buildOffer?.min.toLocaleString(isINR ? "en-IN" : "en-US")} – {curSym}{buildOffer?.max.toLocaleString(isINR ? "en-IN" : "en-US")}
+                  </div>
                 </div>
-                <div className="p-2 rounded bg-black/40 border border-white/[0.06]">
-                  <span className="text-slate-400 block text-[10px]">Feasible Window</span>
-                  <span
-                    className={`font-bold ${
-                      commercial.feasibleOfferWindow.status === "HEALTHY"
-                        ? "text-emerald-400"
-                        : "text-amber-400"
-                    }`}
-                  >
-                    {commercial.feasibleOfferWindow.status}
-                  </span>
+
+                <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                  <div className="text-[10px] text-slate-500 uppercase">Monthly Care</div>
+                  <div className="text-xs font-bold text-teal-400 mt-0.5">
+                    {curSym}{careOffer?.min.toLocaleString(isINR ? "en-IN" : "en-US")}–{curSym}{careOffer?.max.toLocaleString(isINR ? "en-IN" : "en-US")}/mo
+                  </div>
                 </div>
               </div>
 
-              {/* Offer Breakdown */}
-              <div className="p-2.5 rounded bg-black/40 border border-white/[0.06] text-xs">
-                <div className="flex items-center justify-between text-slate-200">
-                  <span>Recommended Build Package:</span>
-                  <span className="text-emerald-400 font-bold font-mono">
-                    ₹{commercial.recommendedBuildOffer.min.toLocaleString("en-IN")} – ₹{commercial.recommendedBuildOffer.max.toLocaleString("en-IN")}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-slate-200 mt-1">
-                  <span>Monthly Growth &amp; Care Retainer:</span>
-                  <span className="text-indigo-300 font-bold font-mono">
-                    ₹{commercial.recommendedMonthlyCare.min.toLocaleString("en-IN")} – ₹{commercial.recommendedMonthlyCare.max.toLocaleString("en-IN")}/mo
-                  </span>
-                </div>
+              {/* Rationale & Evidence Footnote */}
+              <div className="text-[11px] text-slate-400 leading-relaxed bg-black/20 p-2.5 rounded-lg border border-white/[0.04]">
+                <span className="text-slate-300 font-semibold">Strategic Rationale: </span>
+                {commercial.commercialRationale}
               </div>
-
-              <p className="text-slate-300 text-[11px] leading-relaxed font-sans italic">
-                💡 {commercial.commercialRationale}
-              </p>
             </div>
           )}
 
-          {/* 3. WHAT WE FOUND (Technical Audit Checklist) */}
+          {/* 3. TECHNICAL AUDIT BREAKDOWN */}
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 font-mono">
-              What We Found (Technical Audit)
+              Audit Telemetry &amp; Observations
             </h3>
 
-            <div className="rounded-lg border border-white/[0.06] overflow-hidden bg-[#0A0D14] divide-y divide-white/[0.04]">
-              {/* Row: Website */}
-              <div className="p-3 flex items-center justify-between">
-                <span className="font-medium text-slate-300 font-sans">Website Presence</span>
-                {lead.isGbpDisconnected ? (
-                  <span className="text-purple-300 font-medium font-mono flex items-center gap-1">
-                    <Unlink className="w-3.5 h-3.5 text-purple-400" /> Disconnected Asset ({displayDomain})
-                  </span>
-                ) : lead.hasWebsite ? (
-                  <span className="text-emerald-400 font-medium font-mono flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Active Website Linked on Maps
-                  </span>
-                ) : (
-                  <span className="text-amber-400 font-semibold font-mono flex items-center gap-1">
-                    <XCircle className="w-3.5 h-3.5" /> Zero Website on Google Maps
-                  </span>
-                )}
-              </div>
+            {telemetry ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
+                  <div className="p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
+                    <div className="text-[10px] text-slate-500">SSL Security</div>
+                    <div className={`text-xs font-semibold mt-0.5 ${telemetry.hasSsl ? "text-emerald-400" : "text-rose-400"}`}>
+                      {telemetry.hasSsl ? "Active (HTTPS)" : "Insecure (HTTP)"}
+                    </div>
+                  </div>
 
-              {/* Row: SSL */}
-              <div className="p-3 flex items-center justify-between">
-                <span className="font-medium text-slate-300 font-sans">SSL Certificate</span>
-                {telemetry ? (
-                  telemetry.hasSsl ? (
-                    <span className="text-emerald-400 font-mono flex items-center gap-1">
-                      <ShieldCheck className="w-3.5 h-3.5" /> Valid HTTPS
-                    </span>
-                  ) : (
-                    <span className="text-rose-400 font-mono flex items-center gap-1 font-semibold">
-                      <ShieldAlert className="w-3.5 h-3.5" /> Insecure HTTP
-                    </span>
-                  )
-                ) : (
-                  <span className="text-slate-500">—</span>
-                )}
-              </div>
+                  <div className="p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
+                    <div className="text-[10px] text-slate-500">Mobile Viewport</div>
+                    <div className={`text-xs font-semibold mt-0.5 ${telemetry.viewportMetaPresent && !telemetry.hasHorizontalOverflow ? "text-emerald-400" : "text-rose-400"}`}>
+                      {!telemetry.viewportMetaPresent ? "Missing Viewport" : telemetry.hasHorizontalOverflow ? "Layout Overflow" : "Responsive Pass"}
+                    </div>
+                  </div>
 
-              {/* Row: Viewport / Responsive */}
-              <div className="p-3 flex items-center justify-between">
-                <span className="font-medium text-slate-300 font-sans">Mobile Viewport</span>
-                {telemetry ? (
-                  telemetry.viewportMetaPresent && !telemetry.hasHorizontalOverflow ? (
-                    <span className="text-emerald-400 font-mono flex items-center gap-1">
-                      <Smartphone className="w-3.5 h-3.5" /> Responsive Touch
-                    </span>
-                  ) : (
-                    <span className="text-amber-400 font-mono flex items-center gap-1 font-semibold">
-                      <AlertTriangle className="w-3.5 h-3.5" /> Desktop / Overflow Issue
-                    </span>
-                  )
-                ) : (
-                  <span className="text-slate-500">—</span>
-                )}
-              </div>
+                  <div className="p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
+                    <div className="text-[10px] text-slate-500">1-Tap Intake CTA</div>
+                    <div className={`text-xs font-semibold mt-0.5 ${telemetry.hasDirectClickToCall || telemetry.hasWhatsAppDirectLink ? "text-emerald-400" : "text-amber-400"}`}>
+                      {telemetry.hasWhatsAppDirectLink ? "WhatsApp Active" : telemetry.hasDirectClickToCall ? "Click-to-Call" : "No Direct CTA"}
+                    </div>
+                  </div>
 
-              {/* Row: WhatsApp */}
-              <div className="p-3 flex items-center justify-between">
-                <span className="font-medium text-slate-300 font-sans">Direct WhatsApp Link</span>
-                {telemetry ? (
-                  telemetry.hasWhatsAppDirectLink ? (
-                    <span className="text-emerald-400 font-mono flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> 1-Tap Trigger Active
-                    </span>
-                  ) : (
-                    <span className="text-slate-400 font-mono flex items-center gap-1">
-                      <XCircle className="w-3.5 h-3.5 text-slate-500" /> Missing Direct Link
-                    </span>
-                  )
-                ) : (
-                  <span className="text-slate-500">—</span>
-                )}
-              </div>
-
-              {/* Row: Booking Funnel */}
-              <div className="p-3 flex items-center justify-between">
-                <span className="font-medium text-slate-300 font-sans">24/7 Calendar Intake</span>
-                {telemetry ? (
-                  telemetry.hasInteractiveBookingForm ? (
-                    <span className="text-emerald-400 font-mono flex items-center gap-1">
-                      <Calendar className="w-3.5 h-3.5" /> Online Booking Present
-                    </span>
-                  ) : (
-                    <span className="text-amber-400 font-mono flex items-center gap-1 font-semibold">
-                      <XCircle className="w-3.5 h-3.5" /> No Online Scheduling
-                    </span>
-                  )
-                ) : (
-                  <span className="text-slate-500">—</span>
-                )}
-              </div>
-
-              {/* Row: Latency */}
-              {telemetry && telemetry.initialLoadLatencyMs > 0 && (
-                <div className="p-3 flex items-center justify-between">
-                  <span className="font-medium text-slate-300 font-sans">Load Latency</span>
-                  <span className="text-slate-300 font-mono font-medium">
-                    {telemetry.initialLoadLatencyMs} ms
-                  </span>
+                  <div className="p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
+                    <div className="text-[10px] text-slate-500">Load Latency</div>
+                    <div className={`text-xs font-semibold mt-0.5 ${telemetry.initialLoadLatencyMs < 1500 ? "text-emerald-400" : telemetry.initialLoadLatencyMs < 3000 ? "text-amber-400" : "text-rose-400"}`}>
+                      {telemetry.initialLoadLatencyMs}ms
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
+
+                {/* Findings List */}
+                {telemetry.findings && telemetry.findings.length > 0 && (
+                  <div className="p-3.5 rounded-lg bg-[#0A0D14] border border-white/[0.06] space-y-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">
+                      Observed Gaps ({telemetry.findings.length})
+                    </div>
+                    <div className="space-y-1.5">
+                      {telemetry.findings.map((f, i) => (
+                        <div key={i} className="text-slate-300 text-xs flex items-start gap-2">
+                          <span className="text-amber-400 font-bold">•</span>
+                          <span>{f.evidence}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg bg-[#0A0D14] border border-white/[0.06] text-slate-400 text-xs text-center font-mono">
+                No active website detected on Google Maps profile.
+              </div>
+            )}
           </div>
 
-          {/* 4. RECOMMENDED APPROACH & VALUE */}
+          {/* 4. HIGH-CONVICTION OUTREACH DECKS */}
           <div>
             <div className="flex items-center justify-between mb-2.5">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
-                Recommended Approach &amp; Scope
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <span>High-Conviction Sales Copy &amp; Scripts</span>
               </h3>
-              <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                Est. Value: {displayEstimatedValue}
-              </span>
+
+              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("whatsapp")}
+                  className={`px-2 py-1 rounded text-[11px] font-mono transition cursor-pointer ${
+                    activeTab === "whatsapp" ? "bg-emerald-600 text-white font-semibold" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  WhatsApp
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("email")}
+                  className={`px-2 py-1 rounded text-[11px] font-mono transition cursor-pointer ${
+                    activeTab === "email" ? "bg-indigo-600 text-white font-semibold" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Cold Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("phone")}
+                  className={`px-2 py-1 rounded text-[11px] font-mono transition cursor-pointer ${
+                    activeTab === "phone" ? "bg-purple-600 text-white font-semibold" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Phone Script
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("scope")}
+                  className={`px-2 py-1 rounded text-[11px] font-mono transition cursor-pointer ${
+                    activeTab === "scope" ? "bg-slate-700 text-white font-semibold" : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  Scope
+                </button>
+              </div>
             </div>
 
-            <p className="text-slate-300 leading-relaxed mb-3 font-sans">
-              {pitch?.suggestedScope || "Synchronize Google Business Profile, implement Local Business Schema markup, and connect mobile booking funnel."}
-            </p>
-
-            {/* Outreach Script Tabs */}
-            <div className="rounded-lg border border-white/[0.08] bg-[#0A0D14] overflow-hidden">
-              <div className="p-2 border-b border-white/[0.06] flex items-center justify-between gap-2 overflow-x-auto">
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setActiveTab("email")}
-                    className={`px-3 py-1 rounded text-xs font-medium font-mono transition cursor-pointer ${
-                      activeTab === "email" ? "bg-white/[0.1] text-white" : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    Cold Email
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("whatsapp")}
-                    className={`px-3 py-1 rounded text-xs font-medium font-mono transition cursor-pointer ${
-                      activeTab === "whatsapp" ? "bg-white/[0.1] text-white" : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    WhatsApp Hook
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("phone")}
-                    className={`px-3 py-1 rounded text-xs font-medium font-mono transition cursor-pointer ${
-                      activeTab === "phone" ? "bg-white/[0.1] text-white" : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    Phone Script
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("scope")}
-                    className={`px-3 py-1 rounded text-xs font-medium font-mono transition cursor-pointer ${
-                      activeTab === "scope" ? "bg-white/[0.1] text-white" : "text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    Technical Scope
-                  </button>
+            {pitch?.outreachAllowed === false ? (
+              <div className="p-4 rounded-lg bg-rose-500/10 border border-rose-500/20 text-slate-300 font-mono text-xs space-y-2">
+                <div className="font-bold text-rose-300 flex items-center gap-1.5 text-xs">
+                  <ShieldCheck className="w-4 h-4 text-rose-400" />
+                  <span>OUTREACH GATED — {dossier?.disposition?.replace(/_/g, " ") || "NOT A FIT"}</span>
                 </div>
+                <p className="text-[11px] text-slate-400 font-sans leading-relaxed">
+                  {pitch?.dispositionReason || "Observed website telemetry does not establish a commercially relevant agency problem."}
+                </p>
+                <div className="text-[10px] text-slate-500 font-mono">
+                  Engine Integrity Gate: The system does not manufacture outreach scripts for leads where an agency intervention is not commercially evidenced.
+                </div>
+              </div>
+            ) : (
+              <div className="relative">
+                <pre className="p-4 rounded-lg bg-[#0A0D14] border border-white/[0.08] text-slate-200 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-all overflow-x-auto max-h-64">
+                  {getActiveCopyText()}
+                </pre>
 
                 <button
+                  type="button"
                   onClick={() => handleCopy(getActiveCopyText(), activeTab)}
-                  className="px-2.5 py-1 rounded bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-mono font-medium transition flex items-center gap-1 cursor-pointer shrink-0"
+                  className="absolute top-2.5 right-2.5 px-2.5 py-1.5 rounded bg-white/[0.08] hover:bg-white/[0.15] text-slate-200 text-xs font-mono flex items-center gap-1.5 transition cursor-pointer backdrop-blur-md border border-white/[0.08]"
                 >
                   {copiedTab === activeTab ? (
                     <>
-                      <Check className="w-3 h-3 text-emerald-400" />
-                      <span>Copied!</span>
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="text-emerald-400 font-semibold">Copied</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3 h-3" />
-                      <span>Copy Script</span>
+                      <Copy className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Copy {activeTab}</span>
                     </>
                   )}
                 </button>
               </div>
-
-              <div className="p-4 bg-black/40">
-                <pre className="text-xs text-slate-300 font-mono whitespace-pre-wrap leading-relaxed select-text">
-                  {getActiveCopyText()}
-                </pre>
-              </div>
-            </div>
+            )}
           </div>
         </div>
 
-        {/* Drawer Footer Actions */}
+        {/* Drawer Bottom Triage Action Bar */}
         <div className="p-4 border-t border-white/[0.08] bg-[#0A0D14] flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400 font-mono">Status:</span>
+            <span className="text-[11px] text-slate-400 font-mono">Triage Status:</span>
             <select
               value={lead.humanStatus}
               disabled={isUpdatingStatus}
-              onChange={(e) => onStatusChange(lead.id, e.target.value as HumanStatus)}
-              className="px-2.5 py-1 rounded bg-slate-900 border border-white/[0.12] text-slate-200 text-xs font-mono focus:outline-none focus:border-indigo-400 cursor-pointer"
+              onChange={async (e) => {
+                const handler = onStatusChange || onUpdateStatus;
+                if (handler) {
+                  setIsUpdatingStatus(true);
+                  try {
+                    await handler(lead.id, e.target.value);
+                  } finally {
+                    setIsUpdatingStatus(false);
+                  }
+                }
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/[0.12] text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-400 cursor-pointer"
             >
               <option value="NEW">NEW</option>
               <option value="REVIEWED">REVIEWED</option>
@@ -559,18 +592,18 @@ Deliverables:
           <div className="flex items-center gap-2">
             {lead.phone && (
               <a
-                href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(whatsappCopy)}`}
+                href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(validatedOutreach.whatsappCopy)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-medium font-mono transition flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
               >
-                <Send className="w-3 h-3" />
                 <span>Open WhatsApp</span>
               </a>
             )}
             <button
+              type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 text-xs font-medium transition cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs transition cursor-pointer border border-white/[0.08]"
             >
               Close
             </button>

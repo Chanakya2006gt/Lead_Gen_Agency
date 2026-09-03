@@ -1,13 +1,16 @@
-import { ProblemValueAssessment, ProblemSeverity, EvidenceProvenance, PriceRange } from "./types";
+import { ProblemValueAssessment, ProblemSeverity, EvidenceProvenance } from "./types";
 import { AuditTelemetry } from "@/core/db/schema";
 import { MarketContextResult } from "./MarketContext";
+import { BusinessModelClassifier } from "./BusinessModelClassifier";
 
 export interface ProblemValueParams {
   hasWebsite: boolean;
   isGbpDisconnected?: boolean;
+  category?: string | null;
   auditTelemetry?: AuditTelemetry | null;
   marketContext: MarketContextResult;
   businessName: string;
+  websiteTextSnippet?: string | null;
 }
 
 export class ProblemValueEvaluator {
@@ -15,47 +18,55 @@ export class ProblemValueEvaluator {
     const evidence: { statement: string; provenance: EvidenceProvenance }[] = [];
     const currency = params.marketContext.currency;
 
-    // 1. Missing GBP Website Link (Direct local 3-pack discoverability drop)
-    if (params.isGbpDisconnected) {
-      evidence.push({
-        statement: "Official verified website exists but is missing from Google Business Profile listing.",
-        provenance: "OBSERVED",
-      });
-      evidence.push({
-        statement: "High-intent mobile searchers looking up the business on Google Maps cannot access full service details or booking funnel directly.",
-        provenance: "INFERRED",
-      });
-      evidence.push({
-        statement: "Exact volume of lost patient appointments or customer enquiries due to Google Maps link disconnection.",
-        provenance: "UNKNOWN",
-      });
+    // 1. Establish Business Model Context
+    const classification = BusinessModelClassifier.classify({
+      name: params.businessName,
+      category: params.category,
+      findings: params.auditTelemetry?.findings || [],
+      websiteTextSnippet: params.websiteTextSnippet,
+    });
 
-      return {
-        severity: "HIGH",
-        revenueProximity: "HIGH",
-        revenueImpactEvidence: "INFERRED",
-        operationalImpact: "MEDIUM",
-        frequency: "DAILY",
-        problemValueBand: {
-          min: currency === "INR" ? 15000 : 1500,
-          max: currency === "INR" ? 35000 : 3500,
-          currency,
+    const { model, relevantWorkflows } = classification;
+
+    // 2. Disconnected Google Business Profile (Only relevant if business model relies on local discovery)
+    if (params.isGbpDisconnected) {
+      if (relevantWorkflows.localGbpSync) {
+        evidence.push({
+          statement: "Official verified website exists but is missing from Google Business Profile listing.",
+          provenance: "OBSERVED",
+        });
+        evidence.push({
+          statement: "High-intent local mobile searchers looking up the business on Google Maps cannot access full service details or booking funnel directly.",
+          provenance: "INFERRED",
+        });
+
+        return {
+          severity: "HIGH",
+          revenueProximity: "HIGH",
+          revenueImpactEvidence: "INFERRED",
+          operationalImpact: "MEDIUM",
+          frequency: "DAILY",
+          problemValueBand: {
+            min: currency === "INR" ? 15000 : 1500,
+            max: currency === "INR" ? 35000 : 3500,
+            currency,
+            confidence: 0.85,
+            basis: "BOTTOM_UP_WBS",
+          },
           confidence: 0.85,
-          basis: "BOTTOM_UP_WBS",
-        },
-        confidence: 0.85,
-        evidence,
-      };
+          evidence,
+        };
+      }
     }
 
-    // 2. Zero Website on Google Maps (Total Digital Blackout)
+    // 3. Zero Website on Google Maps
     if (!params.hasWebsite) {
       evidence.push({
-        statement: "Zero official website presence on Google Business Profile.",
+        statement: "Zero official website presence detected.",
         provenance: "OBSERVED",
       });
       evidence.push({
-        statement: "Forces 100% of high-intent searchers into office-hours phone calls or forfeits them to competitors with online intake.",
+        statement: "Forces potential customers into office-hours phone calls or forfeits them to competitors with online intake.",
         provenance: "INFERRED",
       });
 
@@ -77,7 +88,7 @@ export class ProblemValueEvaluator {
       };
     }
 
-    // 3. Evaluated Telemetry Defects
+    // 4. Evaluated Telemetry Defects with Business Model Relevance Filtering
     let severityScore = 0;
     let revenueProximity: "LOW" | "MEDIUM" | "HIGH" = "LOW";
     let operationalImpact: "LOW" | "MEDIUM" | "HIGH" = "LOW";
@@ -94,6 +105,7 @@ export class ProblemValueEvaluator {
         brokenLinksCount,
       } = params.auditTelemetry;
 
+      // Universal Technical Requirement: SSL
       if (!hasSsl) {
         severityScore += 2;
         evidence.push({
@@ -102,6 +114,7 @@ export class ProblemValueEvaluator {
         });
       }
 
+      // Universal Technical Requirement: Responsive Viewport
       if (!viewportMetaPresent || hasHorizontalOverflow) {
         severityScore += 3;
         revenueProximity = "HIGH";
@@ -110,33 +123,40 @@ export class ProblemValueEvaluator {
           provenance: "OBSERVED",
         });
         evidence.push({
-          statement: "Smartphone users experience tap frustration and high bounce rates on service pages.",
+          statement: "Smartphone users experience layout disruption and high bounce rates on key pages.",
           provenance: "INFERRED",
         });
       }
 
-      if (!hasInteractiveBookingForm) {
-        severityScore += 2;
-        operationalImpact = "HIGH";
-        evidence.push({
-          statement: "No interactive 24/7 online scheduling or calendar funnel detected.",
-          provenance: "OBSERVED",
-        });
+      // Model-Specific: Interactive Booking Calendar (Only relevant for appointment services & high-trust practices)
+      if (relevantWorkflows.appointmentBooking) {
+        if (!hasInteractiveBookingForm) {
+          severityScore += 2;
+          operationalImpact = "HIGH";
+          evidence.push({
+            statement: "No interactive 24/7 online scheduling or appointment booking funnel detected.",
+            provenance: "OBSERVED",
+          });
+        }
       }
 
-      if (!hasDirectClickToCall && !hasWhatsAppDirectLink) {
-        severityScore += 2;
-        revenueProximity = "HIGH";
-        evidence.push({
-          statement: "No direct 1-tap phone call or WhatsApp consultation triggers found on mobile.",
-          provenance: "OBSERVED",
-        });
+      // Model-Specific: 1-Tap Mobile Phone Call / WhatsApp (Only relevant for local appointment services / dining)
+      if (relevantWorkflows.whatsAppIntake) {
+        if (!hasDirectClickToCall && !hasWhatsAppDirectLink) {
+          severityScore += 2;
+          revenueProximity = "HIGH";
+          evidence.push({
+            statement: "No direct 1-tap phone call or WhatsApp consultation trigger found for mobile visitors.",
+            provenance: "OBSERVED",
+          });
+        }
       }
 
+      // Universal Technical Requirement: Speed / TTFB
       if (initialLoadLatencyMs > 2500) {
         severityScore += 1.5;
         evidence.push({
-          statement: `Initial server load latency (${initialLoadLatencyMs}ms) exceeds the 2.5s Core Web Vitals threshold.`,
+          statement: `Initial server load latency (${initialLoadLatencyMs}ms) exceeds performance benchmark.`,
           provenance: "OBSERVED",
         });
       }

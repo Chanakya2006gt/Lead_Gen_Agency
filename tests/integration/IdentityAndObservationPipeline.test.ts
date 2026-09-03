@@ -103,7 +103,7 @@ describe("Stable Identity & Observation History Pipeline", () => {
     const secondScrapeWebsite = null; // Scrape glitch
     const secondScrapeReviews = 164; // +14 reviews growth
     const effectiveWebsite = secondScrapeWebsite || existing!.websiteUrl;
-    const reviewDelta = secondScrapeReviews - existing!.reviewCount;
+    const reviewDelta = secondScrapeReviews - (existing!.reviewCount || 0);
 
     db.update(leads).set({
       scanId: scanId2,

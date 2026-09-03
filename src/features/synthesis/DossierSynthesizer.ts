@@ -1,13 +1,17 @@
-import { BusinessDossier, AuditTelemetry, ReviewTrend, SignalProvenance } from "@/core/db/schema";
+import { BusinessDossier, AuditTelemetry, ReviewTrend, SignalProvenance, GoogleEvidence, LeadDisposition } from "@/core/db/schema";
 import { OpportunityClassifier } from "@/features/qualification/OpportunityClassifier";
 import { ScoringEngine } from "@/features/qualification/ScoringEngine";
 import { CommercialEconomicsEngine } from "@/features/commercial/CommercialEconomicsEngine";
+import { BusinessModelClassifier } from "@/features/commercial/BusinessModelClassifier";
+import { CustomerJourneyDetector } from "@/features/qualification/CustomerJourneyDetector";
+import { OpportunityRelevanceEngine } from "@/features/qualification/OpportunityRelevanceEngine";
+import { QualificationEngine } from "@/features/qualification/QualificationEngine";
 
 export interface SynthesizerParams {
   name: string;
   category: string;
-  rating: number;
-  reviewCount: number;
+  rating?: number | null;
+  reviewCount?: number | null;
   reviewTrend: ReviewTrend;
   reviewsLast30Days?: number | null;
   reviewsLast90Days?: number | null;
@@ -20,6 +24,7 @@ export interface SynthesizerParams {
   googleMapsUrl?: string | null;
   auditTelemetry?: AuditTelemetry | null;
   websiteTextSnippet?: string | null;
+  googleEvidence?: GoogleEvidence;
   discoveryNiche?: string;
   discoveryQuery?: string;
   googlePrimaryType?: string;
@@ -33,18 +38,86 @@ export class DossierSynthesizer {
     params: SynthesizerParams,
     apiKey?: string
   ): Promise<BusinessDossier> {
-    const opportunityType = OpportunityClassifier.classify({
-      hasWebsite: params.hasWebsite,
-      isGbpDisconnected: params.isGbpDisconnected,
-      reviewCount: params.reviewCount,
-      rating: params.rating,
-      auditTelemetry: params.auditTelemetry,
+    // 1. Establish Business Model Classification
+    const classification = BusinessModelClassifier.classify({
+      name: params.name,
       category: params.category,
+      domain: params.websiteUrl || params.unlinkedWebsiteUrl,
+      findings: params.auditTelemetry?.findings || [],
+      websiteTextSnippet: params.websiteTextSnippet,
+    });
+    const { model, relevantWorkflows } = classification;
+
+    // 2. Establish Customer Acquisition Journey
+    const customerJourney = CustomerJourneyDetector.detect({
+      name: params.name,
+      category: params.category,
+      domain: params.websiteUrl || params.unlinkedWebsiteUrl,
+      websiteTextSnippet: params.websiteTextSnippet,
+      hasInteractiveBooking: params.auditTelemetry?.hasInteractiveBookingForm,
+      hasWhatsApp: params.auditTelemetry?.hasWhatsAppDirectLink,
+      hasClickToCall: params.auditTelemetry?.hasDirectClickToCall,
     });
 
+    // 3. Establish Typed Google Evidence Boundary
+    const isExplicitlyUnverified =
+      params.googleEvidence?.status === "NOT_VERIFIED" ||
+      params.rating === null ||
+      params.reviewCount === null;
+
+    const googleEvidence: GoogleEvidence = params.googleEvidence || (
+      !isExplicitlyUnverified &&
+      typeof params.rating === "number" &&
+      typeof params.reviewCount === "number"
+        ? {
+            status: "VERIFIED",
+            placeId: params.googleMapsUrl || "verified_place",
+            googleMapsUrl: params.googleMapsUrl || "",
+            rating: params.rating,
+            reviewCount: params.reviewCount,
+            primaryType: params.googlePrimaryType,
+            primaryTypeDisplayName: params.googlePrimaryTypeDisplayName,
+            source: "GOOGLE_PLACES",
+            retrievedAt: new Date().toISOString(),
+          }
+        : {
+            status: "NOT_VERIFIED",
+            placeId: null,
+            googleMapsUrl: params.googleMapsUrl || null,
+            rating: null,
+            reviewCount: null,
+            primaryType: params.googlePrimaryType || null,
+            primaryTypeDisplayName: params.googlePrimaryTypeDisplayName || null,
+            source: "NONE",
+            retrievedAt: new Date().toISOString(),
+          }
+    );
+
+    const isGoogleVerified =
+      googleEvidence.status === "VERIFIED" &&
+      typeof googleEvidence.rating === "number" &&
+      googleEvidence.rating !== null &&
+      typeof googleEvidence.reviewCount === "number" &&
+      googleEvidence.reviewCount !== null;
+
+    // 4. Run Opportunity Relevance Engine
+    const opportunityAssessment = OpportunityRelevanceEngine.evaluate({
+      name: params.name,
+      category: params.category,
+      businessModel: classification,
+      hasWebsite: params.hasWebsite,
+      isGbpDisconnected: params.isGbpDisconnected,
+      unlinkedWebsiteUrl: params.unlinkedWebsiteUrl,
+      websiteUrl: params.websiteUrl,
+      auditTelemetry: params.auditTelemetry,
+      googleEvidence,
+    });
+
+    const opportunityType = opportunityAssessment.opportunityType;
+
     const scores = ScoringEngine.computeScores({
-      rating: params.rating,
-      reviewCount: params.reviewCount,
+      rating: isGoogleVerified ? googleEvidence.rating : null,
+      reviewCount: isGoogleVerified ? googleEvidence.reviewCount : null,
       reviewTrend: params.reviewTrend,
       reviewsLast30Days: params.reviewsLast30Days,
       reviewsLast90Days: params.reviewsLast90Days,
@@ -53,12 +126,12 @@ export class DossierSynthesizer {
       opportunityType,
     });
 
-    // 1. Run Market-Aware Commercial Economics Engine
+    // 5. Run Market-Aware Commercial Economics Engine
     const commercialProfile = CommercialEconomicsEngine.analyze({
       name: params.name,
       category: params.category,
-      rating: params.rating,
-      reviewCount: params.reviewCount,
+      rating: isGoogleVerified ? googleEvidence.rating : null,
+      reviewCount: isGoogleVerified ? googleEvidence.reviewCount : null,
       formattedAddress: params.formattedAddress,
       hasWebsite: params.hasWebsite,
       isGbpDisconnected: params.isGbpDisconnected,
@@ -67,28 +140,46 @@ export class DossierSynthesizer {
       serviceType: opportunityType,
     });
 
-    // 2. Signal Provenance & Confidence Ledger
+    // 6. Run First-Class Qualification Engine ("Not Your Client" Detection)
+    const qualification = QualificationEngine.evaluate({
+      name: params.name,
+      category: params.category,
+      businessModel: classification,
+      customerJourney,
+      auditTelemetry: params.auditTelemetry,
+      googleEvidence,
+      opportunityAssessment,
+      commercialProfile,
+    });
+
+    // 7. Signal Provenance & Confidence Ledger
     const provenance: SignalProvenance = {
-      ratingConfidence: "high",
-      reviewVelocityConfidence: params.reviewTrend !== "UNKNOWN" ? "observed" : "unknown",
-      identityConfidence: params.googleMapsUrl ? "google_verified" : "deterministic",
+      ratingConfidence: isGoogleVerified ? "high" : "none",
+      reviewVelocityConfidence: isGoogleVerified && params.reviewTrend !== "UNKNOWN" ? "observed" : "unknown",
+      identityConfidence: isGoogleVerified ? "google_verified" : "direct_audit",
       auditConfidence: params.auditTelemetry ? "empirical" : "pending",
     };
 
-    // 3. Grounded Deterministic Rules Engine
-    const identifiedStrengths = [
-      `Established market reputation with ${params.rating}★ rating across ${params.reviewCount} verified Google reviews.`,
-    ];
-
-    if (params.reviewTrend !== "UNKNOWN") {
+    // 8. Grounded Deterministic Rules Engine (Zero Unverified Claim Generation)
+    const identifiedStrengths: string[] = [];
+    if (isGoogleVerified) {
       identifiedStrengths.push(
-        `Measured customer review velocity: ${params.reviewTrend}.`
+        `Established market reputation with ${googleEvidence.rating}★ rating across ${googleEvidence.reviewCount} verified Google reviews.`
+      );
+      if (params.reviewTrend !== "UNKNOWN") {
+        identifiedStrengths.push(
+          `Measured customer review velocity: ${params.reviewTrend}.`
+        );
+      }
+    } else {
+      identifiedStrengths.push(
+        `Direct digital domain analysis completed: Active web infrastructure inspected.`
       );
     }
 
     const identifiedBottlenecks: string[] = [];
 
-    if (params.isGbpDisconnected) {
+    if (params.isGbpDisconnected && relevantWorkflows.localGbpSync) {
       const domainDisplay = params.unlinkedWebsiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "official domain";
       identifiedBottlenecks.push(
         `Disconnected Google Business Profile: Official website (${domainDisplay}) exists but is missing from Google Maps profile.`
@@ -98,7 +189,7 @@ export class DossierSynthesizer {
       );
     } else if (!params.hasWebsite) {
       identifiedBottlenecks.push(
-        "Zero official website presence on Google Business Profile, forfeiting high-intent mobile searchers to competitors."
+        "Zero official website presence detected, forfeiting high-intent digital searchers to competitors."
       );
       identifiedBottlenecks.push(
         "Lacks direct digital intake, forcing all potential customers to call during office hours only."
@@ -123,16 +214,18 @@ export class DossierSynthesizer {
         identifiedBottlenecks.push("Mobile Friction: Missing responsive viewport meta tag or horizontal layout overflow.");
       }
 
-      if (!hasInteractiveBookingForm) {
+      // Workflow-filtered: Appointment Booking
+      if (relevantWorkflows.appointmentBooking && !hasInteractiveBookingForm) {
         identifiedBottlenecks.push("Operational Gap: No 24/7 interactive online booking or calendar funnel.");
       }
 
-      if (!hasDirectClickToCall && !hasWhatsAppDirectLink) {
+      // Workflow-filtered: 1-Tap Call / WhatsApp
+      if (relevantWorkflows.whatsAppIntake && !hasDirectClickToCall && !hasWhatsAppDirectLink) {
         identifiedBottlenecks.push("Conversion Leak: No direct 1-tap call or WhatsApp consultation link for phone visitors.");
       }
 
       if (initialLoadLatencyMs > 2500) {
-        identifiedBottlenecks.push(`Performance Bottleneck: Slow initial load latency (${initialLoadLatencyMs}ms) hurts search rankings.`);
+        identifiedBottlenecks.push(`Performance Bottleneck: Slow initial load latency (${initialLoadLatencyMs}ms) hurts user experience and SEO.`);
       }
 
       if (identifiedBottlenecks.length === 0 && findings.length > 0) {
@@ -140,28 +233,9 @@ export class DossierSynthesizer {
       }
     }
 
-    let coreAngle = "";
-    if (opportunityType === "DISCONNECTED_GBP_WEBSITE") {
-      const domainDisplay = params.unlinkedWebsiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "official domain";
-      coreAngle = `Reconnecting your active website (${domainDisplay}) to your Google Maps profile to capture patients and recover local 3-pack search ranking.`;
-    } else if (opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE") {
-      coreAngle = `Automating client scheduling, WhatsApp intake, and internal service management for ${params.name}.`;
-    } else if (opportunityType === "WEBSITE_AUTOMATION") {
-      coreAngle = `Upgrading ${params.name}'s mobile speed, fixing desktop pinch-to-zoom layout, and adding 1-tap WhatsApp consultation booking.`;
-    } else {
-      coreAngle = `Launching a high-converting mobile digital storefront for ${params.name} to capture Google Maps traffic and direct WhatsApp leads.`;
-    }
-
-    // Dynamic suggested scope from CommercialProfile
-    const suggestedScope = commercialProfile.downscopedScopeDescription || (
-      opportunityType === "DISCONNECTED_GBP_WEBSITE"
-        ? "1. Google Business Profile Synchronization: Reconnect verified website to Maps. 2. Local Schema Integration: Embed LocalBusiness JSON-LD markup. 3. 1-Tap WhatsApp Conversion: Connect mobile consultation trigger."
-        : opportunityType === "WEBSITE_AUTOMATION"
-        ? "1. Mobile Viewport & Touch Layout Re-engineering. 2. 24/7 WhatsApp & Online Booking Funnel. 3. SSL Hardening & Speed Acceleration (<1.5s)."
-        : opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE"
-        ? "1. Multi-Staff Calendar & WhatsApp Intake Engine. 2. Automated Patient Reminders & Service Records Portal. 3. Mobile Staff Dashboard."
-        : "1. Mobile-First Storefront Architecture. 2. Doctor/Service Menus & Reviews Embed. 3. 1-Tap WhatsApp Consultation Bar & Google Maps Schema."
-    );
+    // 9. Core Angle and Suggested Scope
+    const coreAngle = opportunityAssessment.coreAngle;
+    const suggestedScope = opportunityAssessment.suggestedScope;
 
     // Format Structured Value Range from CommercialProfile
     const buildOffer = commercialProfile.recommendedBuildOffer;
@@ -171,12 +245,21 @@ export class DossierSynthesizer {
     
     const estimatedValueRange = `${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")} – ${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} Build + ${curSym}${careOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${careOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")}/mo (${commercialProfile.feasibleOfferWindow.status === "DOWN_SCOPED" ? "Lean MVP" : "Market Fit"})`;
 
-    let executiveSummary = `${params.name} is an established ${params.category || "local business"} (${params.rating}★, ${params.reviewCount} reviews) with ${commercialProfile.businessScale} business scale. Commercial assessment recommends a ${commercialProfile.pursuitAssessment.decision} approach with ${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} build package.`;
+    let executiveSummary = "";
+    if (qualification.disposition === "NOT_A_FIT") {
+      executiveSummary = `${params.name} is an established ${params.category || "business"} (${model.replace(/_/g, " ")}). Qualification assessment: NOT A FIT — ${qualification.dispositionReason} Do not pursue based on current evidence.`;
+    } else if (qualification.disposition === "INSUFFICIENT_EVIDENCE") {
+      executiveSummary = `${params.name} is an operating entity. Qualification assessment: INSUFFICIENT EVIDENCE — ${qualification.dispositionReason} Do not generate outreach without further context.`;
+    } else if (isGoogleVerified) {
+      executiveSummary = `${params.name} is an established ${params.category || "local business"} (${googleEvidence.rating}★, ${googleEvidence.reviewCount} reviews) with ${commercialProfile.businessScale} business scale. Commercial assessment recommends a ${commercialProfile.pursuitAssessment.decision} approach with ${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} build package.`;
+    } else {
+      executiveSummary = `${params.name} is an operating ${params.category || "business"} (${model.replace(/_/g, " ")}) with digital web infrastructure audited. Commercial assessment recommends a ${commercialProfile.pursuitAssessment.decision} approach with ${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} build package.`;
+    }
 
-    // 4. Optional OpenAI LLM Enhancement (Strictly Narrative Synthesis, NO price invention)
-    if (apiKey && apiKey.trim().length > 0) {
+    // 10. Optional OpenAI LLM Enhancement (Strictly Evidence-Constrained & Gated by Qualification)
+    if (apiKey && apiKey.trim().length > 0 && qualification.outreachAllowed) {
       try {
-        const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+        const modelName = process.env.OPENAI_MODEL || "gpt-4o-mini";
         const res = await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
           headers: {
@@ -184,18 +267,19 @@ export class DossierSynthesizer {
             Authorization: `Bearer ${apiKey.trim()}`,
           },
           body: JSON.stringify({
-            model,
+            model: modelName,
             messages: [
               {
                 role: "system",
                 content:
-                  "You are an elite B2B sales strategist for digital agencies. Generate concise, punchy executive pitch copy for a local business lead based on the provided commercial profile and audit facts. DO NOT invent or modify price numbers.",
+                  "You are an elite B2B sales strategist for digital agencies. Generate concise, punchy executive pitch copy for a business lead based ONLY on verified facts and business model provided. If Google review data is not verified, DO NOT mention reviews, stars, or customer volume. DO NOT invent prices.",
               },
               {
                 role: "user",
                 content: `Business: ${params.name}
 Category: ${params.category}
-Rating: ${params.rating}★ (${params.reviewCount} reviews)
+Business Model: ${model}
+${isGoogleVerified ? `Google Verified Reputation: ${googleEvidence.rating}★ (${googleEvidence.reviewCount} reviews)` : "Google Reviews: UNVERIFIED / Direct Website Audit (DO NOT invent rating/reviews)"}
 Business Scale: ${commercialProfile.businessScale}
 Commercial Ceiling: ${curSym}${commercialProfile.clientCommercialCeiling.max}
 Feasible Window: ${commercialProfile.feasibleOfferWindow.status}
@@ -230,6 +314,7 @@ Output a 2-sentence executive summary highlighting their exact commercial bottle
       confidenceScore: scores.confidenceScore,
       overallLeadScore: scores.overallLeadScore,
       opportunityType,
+      disposition: qualification.disposition,
       hasWebsite: params.hasWebsite,
       hasGbpWebsiteLink: !params.isGbpDisconnected && params.hasWebsite,
       isGbpDisconnected: params.isGbpDisconnected,
@@ -238,6 +323,7 @@ Output a 2-sentence executive summary highlighting their exact commercial bottle
       identifiedStrengths,
       identifiedBottlenecks,
       provenance,
+      googleEvidence,
       discoveryNiche: params.discoveryNiche,
       discoveryQuery: params.discoveryQuery,
       googlePrimaryType: params.googlePrimaryType,
@@ -249,9 +335,12 @@ Output a 2-sentence executive summary highlighting their exact commercial bottle
         suggestedScope,
         identifiedBottlenecks,
         estimatedValueRange,
+        outreachAllowed: qualification.outreachAllowed,
+        dispositionReason: qualification.dispositionReason,
       },
       executiveSummary,
       commercialProfile,
+      qualification,
     };
   }
 }

@@ -105,13 +105,21 @@ export function OpportunityCardGrid({
 
               {/* Reputation Strip */}
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.06] text-xs font-mono">
-                <span className="text-amber-400 font-bold flex items-center gap-0.5">
-                  <Star className="w-3 h-3 fill-amber-400" /> {lead.rating.toFixed(1)}
-                </span>
-                <span className="text-slate-400">({lead.reviewCount} reviews)</span>
-                {(lead.reviewCountDelta ?? 0) > 0 && (
-                  <span className="text-[10px] text-emerald-400 font-semibold ml-auto">
-                    +{lead.reviewCountDelta} gained
+                {typeof lead.rating === "number" && lead.rating !== null && typeof lead.reviewCount === "number" && lead.reviewCount !== null ? (
+                  <>
+                    <span className="text-amber-400 font-bold flex items-center gap-0.5">
+                      <Star className="w-3 h-3 fill-amber-400" /> {lead.rating.toFixed(1)}
+                    </span>
+                    <span className="text-slate-400">({lead.reviewCount} reviews)</span>
+                    {(lead.reviewCountDelta ?? 0) > 0 && (
+                      <span className="text-[10px] text-emerald-400 font-semibold ml-auto">
+                        +{lead.reviewCountDelta} gained
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-[10px] text-slate-400 px-2 py-0.5 rounded bg-slate-800/60 border border-white/[0.08]">
+                    Direct URL Audit (Unverified Google)
                   </span>
                 )}
               </div>

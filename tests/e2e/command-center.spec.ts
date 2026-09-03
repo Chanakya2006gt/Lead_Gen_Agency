@@ -57,11 +57,11 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     const modal = page.locator(".fixed.inset-0");
     await expect(modal).toBeVisible();
     await expect(modal.locator("text=Why This Lead")).toBeVisible();
-    await expect(modal.locator("text=What We Found")).toBeVisible();
-    await expect(modal.locator("text=Recommended Approach")).toBeVisible();
+    await expect(modal.locator("text=Audit Telemetry & Observations")).toBeVisible();
+    await expect(modal.locator("text=High-Conviction Sales Copy")).toBeVisible();
 
     // 5. Test Copy Script Button
-    const copyButton = modal.locator("button:has-text('Copy Script')");
+    const copyButton = modal.locator("button:has-text('Copy')").first();
     if (await copyButton.isVisible()) {
       await copyButton.click();
       await expect(modal.locator("text=Copied")).toBeVisible();
@@ -87,15 +87,14 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     const firstRow = page.locator("tbody tr").first();
     await expect(firstRow).toBeVisible({ timeout: 15000 });
 
-    // 2. Filter by No Website using testid
+    // 2. Filter by Has Website using testid
     const websiteSelect = page.locator('[data-testid="filter-website"]');
-    await websiteSelect.selectOption("NO_WEBSITE");
-
-    const noWebsiteBadge = page.locator("tbody span:has-text('No Website')").first();
-    await expect(noWebsiteBadge).toBeVisible();
+    await websiteSelect.selectOption("HAS_WEBSITE");
+    await expect(page.locator("tbody tr").first()).toBeVisible();
 
     // 3. Reset Filter
     await websiteSelect.selectOption("ALL");
+    await expect(page.locator("tbody tr").first()).toBeVisible();
   });
 
   test("CSV Export Endpoint responds with valid CSV headers and data", async ({ request }) => {

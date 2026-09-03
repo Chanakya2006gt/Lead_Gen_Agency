@@ -4,22 +4,36 @@ import * as schema from "./schema";
 import path from "path";
 import fs from "fs";
 
-const isTestEnv = process.env.NODE_ENV === "test" || process.env.PLAYWRIGHT_TEST === "1";
-const databaseUrl = process.env.DATABASE_URL || (isTestEnv ? "./lead_engine_test.db" : "./lead_engine.db");
-const dbPath = databaseUrl.startsWith("postgres") ? path.join(process.cwd(), "lead_engine.db") : databaseUrl;
+// Initialize SQLite connection for local offline resilience & workstation builds
+let dbPath = process.env.DATABASE_URL || "./lead_engine.db";
 
-const dir = path.dirname(dbPath);
-if (!fs.existsSync(dir) && dir !== ".") {
+// Use dedicated test db for Vitest isolation
+if (process.env.NODE_ENV === "test") {
+  dbPath = "./lead_engine_test.db";
+}
+
+// Ensure sqlite directory exists
+if (dbPath.startsWith("sqlite:")) {
+  dbPath = dbPath.replace("sqlite:", "");
+}
+
+// Intercept Postgres URLs in local dev if not testing
+if (dbPath.startsWith("postgres://") || dbPath.startsWith("postgresql://")) {
+  dbPath = process.env.NODE_ENV === "test" ? "./lead_engine_test.db" : "./lead_engine.db";
+}
+
+const resolvedPath = path.resolve(process.cwd(), dbPath);
+const dir = path.dirname(resolvedPath);
+if (!fs.existsSync(dir)) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-const sqlite = new Database(dbPath, { timeout: 30000 });
+export const sqlite = new Database(resolvedPath);
+sqlite.pragma("journal_mode = WAL");
+sqlite.pragma("foreign_keys = ON");
+sqlite.pragma("busy_timeout = 5000");
 
-try {
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("busy_timeout = 30000");
-} catch {}
-
+// Initialize and ensure table schema exists
 sqlite.exec(`
   CREATE TABLE IF NOT EXISTS discovery_scans (
     id TEXT PRIMARY KEY,
@@ -35,14 +49,14 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS leads (
     id TEXT PRIMARY KEY,
     scan_id TEXT REFERENCES discovery_scans(id) ON DELETE SET NULL,
-    place_id TEXT NOT NULL,
+    place_id TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     category TEXT,
     formatted_address TEXT,
     phone TEXT,
     google_maps_url TEXT,
-    rating REAL NOT NULL,
-    review_count INTEGER NOT NULL,
+    rating REAL,
+    review_count INTEGER,
     previous_rating REAL,
     previous_review_count INTEGER,
     last_review_date TEXT,
@@ -50,6 +64,7 @@ sqlite.exec(`
     reviews_last_90_days INTEGER,
     reviews_last_180_days INTEGER,
     review_trend TEXT NOT NULL DEFAULT 'UNKNOWN',
+    rating_source TEXT DEFAULT 'UNVERIFIED',
     has_website INTEGER NOT NULL DEFAULT 0,
     has_gbp_website_link INTEGER NOT NULL DEFAULT 0,
     is_gbp_disconnected INTEGER NOT NULL DEFAULT 0,
@@ -82,118 +97,40 @@ sqlite.exec(`
     id TEXT PRIMARY KEY,
     lead_id TEXT REFERENCES leads(id) ON DELETE CASCADE,
     scan_id TEXT REFERENCES discovery_scans(id) ON DELETE SET NULL,
-    observed_rating REAL NOT NULL,
-    observed_review_count INTEGER NOT NULL,
+    observed_rating REAL,
+    observed_review_count INTEGER,
     observed_website_url TEXT,
     observed_phone TEXT,
     observed_at TEXT NOT NULL
   );
 
-  CREATE INDEX IF NOT EXISTS idx_leads_ranking ON leads(total_lead_score, human_status);
   CREATE INDEX IF NOT EXISTS idx_leads_scan_id ON leads(scan_id);
+  CREATE INDEX IF NOT EXISTS idx_leads_total_lead_score ON leads(total_lead_score DESC);
+  CREATE INDEX IF NOT EXISTS idx_leads_opportunity_type ON leads(opportunity_type);
+  CREATE INDEX IF NOT EXISTS idx_leads_human_status ON leads(human_status);
   CREATE INDEX IF NOT EXISTS idx_observations_lead ON lead_observations(lead_id);
+  CREATE INDEX IF NOT EXISTS idx_observations_time ON lead_observations(observed_at);
 `);
 
-// Defensive Pre-Migration Deduplication & Schema Evolution Helper
+// Self-healing migration for nullable fields & incremental columns
 try {
-  const tableInfo = sqlite.prepare("PRAGMA table_info(leads)").all() as { name: string }[];
-  const existingColumns = new Set(tableInfo.map((c) => c.name));
+  const columns = sqlite.prepare("PRAGMA table_info(leads)").all() as { name: string; notnull: number }[];
+  const existingColumns = new Set(columns.map((c) => c.name));
+  const ratingCol = columns.find((c) => c.name === "rating");
 
-  if (!existingColumns.has("google_maps_url")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN google_maps_url TEXT;");
-  }
-  if (!existingColumns.has("previous_rating")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN previous_rating REAL;");
-  }
-  if (!existingColumns.has("previous_review_count")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN previous_review_count INTEGER;");
-  }
-  if (!existingColumns.has("first_observed_at")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN first_observed_at TEXT;");
-  }
-  if (!existingColumns.has("last_observed_at")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN last_observed_at TEXT;");
-  }
-  if (!existingColumns.has("observation_count")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN observation_count INTEGER NOT NULL DEFAULT 1;");
-  }
-  if (!existingColumns.has("review_count_delta")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN review_count_delta INTEGER DEFAULT 0;");
-  }
-  if (!existingColumns.has("rating_delta")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN rating_delta REAL DEFAULT 0;");
-  }
-  if (!existingColumns.has("identity_source")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN identity_source TEXT DEFAULT 'deterministic';");
-  }
-  if (!existingColumns.has("is_gbp_disconnected")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN is_gbp_disconnected INTEGER NOT NULL DEFAULT 0;");
-  }
-  if (!existingColumns.has("has_gbp_website_link")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN has_gbp_website_link INTEGER NOT NULL DEFAULT 0;");
-  }
-  if (!existingColumns.has("gbp_website_url")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN gbp_website_url TEXT;");
-  }
-  if (!existingColumns.has("unlinked_website_url")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN unlinked_website_url TEXT;");
-  }
-  if (!existingColumns.has("commercial_fit_score")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN commercial_fit_score INTEGER DEFAULT 0;");
-  }
-  if (!existingColumns.has("lead_attractiveness_score")) {
-    sqlite.exec("ALTER TABLE leads ADD COLUMN lead_attractiveness_score INTEGER DEFAULT 0;");
-  }
-
-  // Pre-Migration Deduplication: Find any existing duplicate place_id rows, merge observations, and delete duplicates
-  const duplicatePlaceIds = sqlite.prepare(`
-    SELECT place_id, COUNT(*) as count 
-    FROM leads 
-    GROUP BY place_id 
-    HAVING count > 1
-  `).all() as { place_id: string; count: number }[];
-
-  if (duplicatePlaceIds.length > 0) {
-    for (const dup of duplicatePlaceIds) {
-      const allRows = sqlite.prepare(`
-        SELECT id, observation_count, updated_at 
-        FROM leads 
-        WHERE place_id = ? 
-        ORDER BY observation_count DESC, updated_at DESC
-      `).all(dup.place_id) as { id: string }[];
-
-      if (allRows.length > 1) {
-        const canonicalId = allRows[0].id;
-        const duplicateIds = allRows.slice(1).map((r) => r.id);
-
-        for (const duplicateId of duplicateIds) {
-          sqlite.prepare("UPDATE lead_observations SET lead_id = ? WHERE lead_id = ?").run(canonicalId, duplicateId);
-          sqlite.prepare("DELETE FROM leads WHERE id = ?").run(duplicateId);
-        }
-      }
-    }
-  }
-
-  // Enforce DB-Level Unique Index on place_id
-  sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_place_id_unique ON leads(place_id);");
-
-  // Migrate foreign keys if needed to ensure ON DELETE SET NULL on scans
-  const leadsFkList = sqlite.prepare("PRAGMA foreign_key_list(leads)").all() as { table: string; on_delete: string }[];
-  const scanLeadsFk = leadsFkList.find((f) => f.table === "discovery_scans");
-  if (scanLeadsFk && scanLeadsFk.on_delete === "CASCADE") {
+  if (ratingCol && ratingCol.notnull === 1) {
     sqlite.exec(`
-      CREATE TABLE leads_new (
+      CREATE TABLE leads_nullable_fix (
         id TEXT PRIMARY KEY,
         scan_id TEXT REFERENCES discovery_scans(id) ON DELETE SET NULL,
-        place_id TEXT NOT NULL,
+        place_id TEXT NOT NULL UNIQUE,
         name TEXT NOT NULL,
         category TEXT,
         formatted_address TEXT,
         phone TEXT,
         google_maps_url TEXT,
-        website_url TEXT,
-        rating REAL NOT NULL,
-        review_count INTEGER NOT NULL,
+        rating REAL,
+        review_count INTEGER,
         previous_rating REAL,
         previous_review_count INTEGER,
         last_review_date TEXT,
@@ -201,13 +138,21 @@ try {
         reviews_last_90_days INTEGER,
         reviews_last_180_days INTEGER,
         review_trend TEXT NOT NULL DEFAULT 'UNKNOWN',
+        rating_source TEXT DEFAULT 'UNVERIFIED',
         has_website INTEGER NOT NULL DEFAULT 0,
+        has_gbp_website_link INTEGER NOT NULL DEFAULT 0,
+        is_gbp_disconnected INTEGER NOT NULL DEFAULT 0,
+        website_url TEXT,
+        gbp_website_url TEXT,
+        unlinked_website_url TEXT,
         audit_status TEXT NOT NULL DEFAULT 'PENDING',
         audit_telemetry TEXT,
         reputation_score INTEGER DEFAULT 0,
         digital_gap_score INTEGER DEFAULT 0,
         opportunity_score INTEGER DEFAULT 0,
         confidence_score INTEGER DEFAULT 0,
+        commercial_fit_score INTEGER DEFAULT 0,
+        lead_attractiveness_score INTEGER DEFAULT 0,
         total_lead_score INTEGER DEFAULT 0,
         opportunity_type TEXT NOT NULL DEFAULT 'UNKNOWN',
         dossier TEXT,
@@ -221,33 +166,81 @@ try {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
-      INSERT INTO leads_new SELECT * FROM leads;
+      INSERT INTO leads_nullable_fix (
+        id, scan_id, place_id, name, category, formatted_address, phone, google_maps_url,
+        rating, review_count, previous_rating, previous_review_count, last_review_date,
+        reviews_last_30_days, reviews_last_90_days, reviews_last_180_days, review_trend,
+        has_website, has_gbp_website_link, is_gbp_disconnected, website_url, gbp_website_url,
+        unlinked_website_url, audit_status, audit_telemetry, reputation_score, digital_gap_score,
+        opportunity_score, confidence_score, commercial_fit_score, lead_attractiveness_score,
+        total_lead_score, opportunity_type, dossier, human_status, first_observed_at,
+        last_observed_at, observation_count, review_count_delta, rating_delta, identity_source,
+        created_at, updated_at
+      )
+      SELECT
+        id, scan_id, place_id, name, category, formatted_address, phone, google_maps_url,
+        rating, review_count, previous_rating, previous_review_count, last_review_date,
+        reviews_last_30_days, reviews_last_90_days, reviews_last_180_days, review_trend,
+        has_website, has_gbp_website_link, is_gbp_disconnected, website_url, gbp_website_url,
+        unlinked_website_url, audit_status, audit_telemetry, reputation_score, digital_gap_score,
+        opportunity_score, confidence_score, commercial_fit_score, lead_attractiveness_score,
+        total_lead_score, opportunity_type, dossier, human_status, first_observed_at,
+        last_observed_at, observation_count, review_count_delta, rating_delta, identity_source,
+        created_at, updated_at
+      FROM leads;
       DROP TABLE leads;
-      ALTER TABLE leads_new RENAME TO leads;
+      ALTER TABLE leads_nullable_fix RENAME TO leads;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_place_id_unique ON leads(place_id);
     `);
   }
 
-  const obsFkList = sqlite.prepare("PRAGMA foreign_key_list(lead_observations)").all() as { table: string; on_delete: string }[];
-  const scanFk = obsFkList.find((f) => f.table === "discovery_scans");
-  if (scanFk && scanFk.on_delete === "CASCADE") {
-    sqlite.exec(`
-      CREATE TABLE lead_observations_new (
-        id TEXT PRIMARY KEY,
-        lead_id TEXT REFERENCES leads(id) ON DELETE CASCADE,
-        scan_id TEXT REFERENCES discovery_scans(id) ON DELETE SET NULL,
-        observed_rating REAL NOT NULL,
-        observed_review_count INTEGER NOT NULL,
-        observed_website_url TEXT,
-        observed_phone TEXT,
-        observed_at TEXT NOT NULL
-      );
-      INSERT INTO lead_observations_new (id, lead_id, scan_id, observed_rating, observed_review_count, observed_website_url, observed_phone, observed_at)
-        SELECT id, lead_id, scan_id, observed_rating, observed_review_count, observed_website_url, observed_phone, observed_at FROM lead_observations;
-      DROP TABLE lead_observations;
-      ALTER TABLE lead_observations_new RENAME TO lead_observations;
-      CREATE INDEX IF NOT EXISTS idx_observations_lead ON lead_observations(lead_id);
-    `);
+  if (!existingColumns.has("rating_source")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN rating_source TEXT DEFAULT 'UNVERIFIED';");
+  }
+  if (!existingColumns.has("previous_rating")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN previous_rating REAL;");
+  }
+  if (!existingColumns.has("previous_review_count")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN previous_review_count INTEGER;");
+  }
+  if (!existingColumns.has("last_review_date")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN last_review_date TEXT;");
+  }
+  if (!existingColumns.has("reviews_last_30_days")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN reviews_last_30_days INTEGER;");
+  }
+  if (!existingColumns.has("reviews_last_90_days")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN reviews_last_90_days INTEGER;");
+  }
+  if (!existingColumns.has("reviews_last_180_days")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN reviews_last_180_days INTEGER;");
+  }
+  if (!existingColumns.has("review_trend")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN review_trend TEXT DEFAULT 'UNKNOWN';");
+  }
+  if (!existingColumns.has("has_gbp_website_link")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN has_gbp_website_link INTEGER DEFAULT 0;");
+  }
+  if (!existingColumns.has("is_gbp_disconnected")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN is_gbp_disconnected INTEGER DEFAULT 0;");
+  }
+  if (!existingColumns.has("gbp_website_url")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN gbp_website_url TEXT;");
+  }
+  if (!existingColumns.has("unlinked_website_url")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN unlinked_website_url TEXT;");
+  }
+  if (!existingColumns.has("commercial_fit_score")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN commercial_fit_score INTEGER DEFAULT 0;");
+  }
+  if (!existingColumns.has("lead_attractiveness_score")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN lead_attractiveness_score INTEGER DEFAULT 0;");
+  }
+  if (!existingColumns.has("rating_delta")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN rating_delta REAL DEFAULT 0;");
+  }
+  if (!existingColumns.has("disposition")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN disposition TEXT DEFAULT 'PURSUE';");
   }
 } catch (migErr) {
   // Silent fallback

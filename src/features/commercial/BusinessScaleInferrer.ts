@@ -10,8 +10,8 @@ export interface BusinessScaleEvidenceItem {
 export interface BusinessScaleInferenceParams {
   name: string;
   category?: string | null;
-  rating: number;
-  reviewCount: number;
+  rating?: number | null;
+  reviewCount?: number | null;
   formattedAddress?: string | null;
   auditTelemetry?: AuditTelemetry | null;
   websiteTextSnippet?: string | null;
@@ -91,31 +91,32 @@ export class BusinessScaleInferrer {
       });
     }
 
-    // 3. Review Volume & Velocity as an Activity/Maturity Signal (NOT direct scale proxy!)
-    if (params.reviewCount > 800) {
-      if (isMicroRetail) {
-        // High reviews on a café/salon = popular micro-retail establishment, not a conglomerate!
-        score += 0.5;
+    // 3. Review Volume & Velocity as an Activity/Maturity Signal (Only when verified)
+    if (typeof params.reviewCount === "number" && params.reviewCount !== null) {
+      if (params.reviewCount > 800) {
+        if (isMicroRetail) {
+          score += 0.5;
+          evidence.push({
+            signal: `High customer review volume (${params.reviewCount} reviews) on local retail confirms high walk-in traffic and strong local tenure.`,
+            weight: 0.5,
+            provenance: "OBSERVED",
+          });
+        } else {
+          score += 2;
+          evidence.push({
+            signal: `Substantial review volume (${params.reviewCount} reviews) indicates sustained high-volume market presence.`,
+            weight: 2,
+            provenance: "OBSERVED",
+          });
+        }
+      } else if (params.reviewCount < 30) {
+        score -= 1;
         evidence.push({
-          signal: `High customer review volume (${params.reviewCount} reviews) on local retail confirms high walk-in traffic and strong local tenure.`,
-          weight: 0.5,
-          provenance: "OBSERVED",
-        });
-      } else {
-        score += 2;
-        evidence.push({
-          signal: `Substantial review volume (${params.reviewCount} reviews) indicates sustained high-volume market presence.`,
-          weight: 2,
+          signal: `Low review volume (${params.reviewCount} reviews) indicates early-stage or niche specialist profile.`,
+          weight: -1,
           provenance: "OBSERVED",
         });
       }
-    } else if (params.reviewCount < 30) {
-      score -= 1;
-      evidence.push({
-        signal: `Low review volume (${params.reviewCount} reviews) indicates early-stage or niche specialist profile.`,
-        weight: -1,
-        provenance: "OBSERVED",
-      });
     }
 
     // 4. Team / Staff Footprint Signals from Telemetry / Headings (if available)
