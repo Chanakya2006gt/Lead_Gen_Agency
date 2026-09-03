@@ -1,9 +1,10 @@
+import crypto from "crypto";
 import { PlaywrightAuditEngine } from "./PlaywrightAuditEngine";
 import { DossierSynthesizer } from "@/features/synthesis/DossierSynthesizer";
-import { BusinessDossier, AuditTelemetry, Lead } from "@/core/db/schema";
+import { AuditTelemetry, Lead } from "@/core/db/schema";
 import { db } from "@/core/db";
-import { leads } from "@/core/db/schema";
-import crypto from "crypto";
+import { leads, discoveryScans } from "@/core/db/schema";
+import dns from "dns/promises";
 
 export interface DirectAuditParams {
   url: string;
@@ -15,16 +16,94 @@ export interface DirectAuditParams {
 
 export interface DirectAuditResponse {
   lead: Lead;
-  dossier: BusinessDossier;
-  auditTelemetry: AuditTelemetry;
+  isEphemeral: boolean;
 }
 
 export class DirectAuditService {
   /**
-   * SSRF & DNS Pre-Resolution Security Boundary
+   * Deduce category from domain and findings when not explicitly supplied
+   */
+  private static deduceCategoryFromWebsite(domain: string, findings: any[]): { category: string; confidence: number } {
+    const d = domain.toLowerCase();
+    const findingsText = findings.map(f => `${f.finding} ${f.evidence}`).join(" ").toLowerCase();
+
+    if (/dent|dental|ortho|tooth|teeth/.test(d) || /dental|dentist|orthodontics/.test(findingsText)) {
+      return { category: "Dental Healthcare", confidence: 0.85 };
+    }
+    if (/clinic|hospital|doctor|physio|derma|health|medical/.test(d) || /clinic|patient|doctor|consultation/.test(findingsText)) {
+      return { category: "Medical & Healthcare Clinic", confidence: 0.8 };
+    }
+    if (/hvac|aircon|ac-repair|cooling|heating/.test(d) || /hvac|heating|air conditioning/.test(findingsText)) {
+      return { category: "HVAC & Climate Services", confidence: 0.85 };
+    }
+    if (/roof|roofing/.test(d) || /roofing|roof repair/.test(findingsText)) {
+      return { category: "Roofing Services", confidence: 0.85 };
+    }
+    if (/salon|beauty|spa|hair|makeup/.test(d) || /salon|hair|styling|spa/.test(findingsText)) {
+      return { category: "Beauty & Personal Wellness", confidence: 0.85 };
+    }
+    if (/tech|soft|solutions|dev|cloud|data|app|systems|digital/.test(d) || /software|saas|solutions|platform|development/.test(findingsText)) {
+      return { category: "Technology & Software Services", confidence: 0.8 };
+    }
+    if (/restaurant|cafe|food|dining|kitchen|bakery/.test(d) || /menu|dining|restaurant|cafe/.test(findingsText)) {
+      return { category: "Hospitality & Dining", confidence: 0.85 };
+    }
+
+    return { category: "Operating Business", confidence: 0.4 };
+  }
+
+  /**
+   * Pre-flight DNS validation for SSRF Protection
    */
   public static async validateUrlSecurity(targetUrl: string): Promise<string> {
-    return PlaywrightAuditEngine.validateUrlSecurity(targetUrl, false);
+    let parsed: URL;
+    try {
+      let normalized = targetUrl.trim();
+      if (!/^https?:\/\//i.test(normalized)) {
+        normalized = `https://${normalized}`;
+      }
+      parsed = new URL(normalized);
+    } catch {
+      throw new Error(`Invalid URL format provided: "${targetUrl}"`);
+    }
+
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error(`Forbidden protocol: "${parsed.protocol}". Only HTTP and HTTPS are permitted.`);
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".internal")
+    ) {
+      throw new Error(`SSRF Defense: Localhost and internal domains are forbidden.`);
+    }
+
+    try {
+      const addresses = await dns.lookup(hostname, { all: true });
+      for (const record of addresses) {
+        const ip = record.address;
+        if (
+          ip.startsWith("127.") ||
+          ip.startsWith("10.") ||
+          ip.startsWith("192.168.") ||
+          /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip) ||
+          ip === "169.254.169.254" ||
+          ip === "::1" ||
+          ip.startsWith("fc00:") ||
+          ip.startsWith("fe80:")
+        ) {
+          throw new Error(`SSRF Defense: Resolved IP "${ip}" belongs to a private, loopback, or cloud-metadata network.`);
+        }
+      }
+    } catch (err: any) {
+      if (err.message.includes("SSRF Defense")) throw err;
+      throw new Error(`Could not resolve hostname "${hostname}": ${err.message}`);
+    }
+
+    return parsed.toString();
   }
 
   /**
@@ -34,8 +113,7 @@ export class DirectAuditService {
     const validatedUrl = await this.validateUrlSecurity(params.url);
     const domainName = new URL(validatedUrl).hostname.replace(/^www\./, "");
     const businessName = params.name?.trim() || domainName.split(".")[0].toUpperCase();
-    const category = params.category?.trim() || "Local Business";
-    const location = params.location?.trim() || "India";
+    const location = params.location?.trim() || "Local Market";
 
     // 1. Live Playwright Dual-Viewport Audit
     const auditEngine = new PlaywrightAuditEngine();
@@ -46,7 +124,21 @@ export class DirectAuditService {
       await auditEngine.close();
     }
 
-    // 2. Synthesize Commercial Profile & Sales Intelligence Dossier
+    // 2. Resolve Category & Provenance
+    let category: string;
+    let categorySource: "USER_SPECIFIED" | "WEBSITE_META" = "USER_SPECIFIED";
+    let categoryConfidence = 1.0;
+
+    if (params.category && params.category.trim().length > 0) {
+      category = params.category.trim();
+    } else {
+      const deduced = this.deduceCategoryFromWebsite(domainName, auditTelemetry.findings || []);
+      category = deduced.category;
+      categorySource = "WEBSITE_META";
+      categoryConfidence = deduced.confidence;
+    }
+
+    // 3. Synthesize Commercial Profile & Sales Intelligence Dossier
     const dossier = await DossierSynthesizer.synthesize({
       name: businessName,
       category,
@@ -59,7 +151,7 @@ export class DirectAuditService {
       auditTelemetry,
     });
 
-    // 3. Construct In-Memory / Ephemeral Lead Object
+    // 4. Construct In-Memory / Ephemeral Lead Object
     const now = new Date().toISOString();
     const leadId = `direct_${crypto.randomBytes(6).toString("hex")}`;
     const placeId = `direct_place_${crypto.randomBytes(8).toString("hex")}`;
@@ -110,19 +202,32 @@ export class DirectAuditService {
       updatedAt: now,
     };
 
-    // 4. Optional Persistence (if human requested 'Save Lead')
-    if (params.persist) {
-      try {
-        db.insert(leads).values(lead).run();
-      } catch (dbErr) {
-        console.warn("Direct audit persistence skipped:", dbErr);
-      }
+    const persist = Boolean(params.persist);
+    if (persist) {
+      const scanId = `direct_scan_${crypto.randomBytes(6).toString("hex")}`;
+      db.transaction((tx) => {
+        tx.insert(discoveryScans).values({
+          id: scanId,
+          niche: category,
+          locationInput: location,
+          radiusKm: 15,
+          status: "COMPLETED",
+          rawDiscoveredCount: 1,
+          qualifiedCount: 1,
+          createdAt: now,
+        }).run();
+
+        tx.insert(leads).values({
+          ...lead,
+          scanId,
+        }).run();
+      });
+      lead.scanId = scanId;
     }
 
     return {
       lead,
-      dossier,
-      auditTelemetry,
+      isEphemeral: !persist,
     };
   }
 }

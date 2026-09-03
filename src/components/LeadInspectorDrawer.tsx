@@ -168,9 +168,30 @@ Deliverables:
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap mb-1">
               <h2 className="text-base font-bold text-white font-sans">{lead.name}</h2>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                {lead.category || "Local Business"}
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                {lead.category || "Operating Business"}
               </span>
+              {dossier?.categorySource && (
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-medium border ${
+                    dossier.categorySource === "GOOGLE_VERIFIED"
+                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                      : dossier.categorySource === "GOOGLE_MAPS_DOM"
+                      ? "bg-sky-500/10 text-sky-400 border-sky-500/20"
+                      : dossier.categorySource === "WEBSITE_META"
+                      ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                      : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                  }`}
+                >
+                  {dossier.categorySource === "GOOGLE_VERIFIED"
+                    ? "Google Verified"
+                    : dossier.categorySource === "GOOGLE_MAPS_DOM"
+                    ? "Maps DOM"
+                    : dossier.categorySource === "WEBSITE_META"
+                    ? "Website Detected"
+                    : "User Specified"}
+                </span>
+              )}
               {lead.isGbpDisconnected ? (
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1">
                   <Unlink className="w-2.5 h-2.5" /> Disconnected GBP
@@ -192,6 +213,17 @@ Deliverables:
                 </a>
               )}
             </div>
+
+            {/* Discovery Query & Provenance Context */}
+            {dossier?.discoveryNiche && (
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-1 font-mono">
+                <span className="text-slate-500">Discovery Intent:</span>
+                <span className="text-slate-300">"{dossier.discoveryNiche}"</span>
+                {dossier.discoveryQuery && dossier.discoveryQuery !== dossier.discoveryNiche && (
+                  <span className="text-slate-500 text-[10px]">({dossier.discoveryQuery})</span>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-2 font-mono">
               <span className="text-amber-400 font-semibold">

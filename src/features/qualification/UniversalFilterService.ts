@@ -15,6 +15,12 @@ export interface RawBusinessInput {
   formattedAddress?: string | null;
   googleMapsUrl?: string | null;
   reviews?: RawReviewTimestamp[];
+  discoveryNiche?: string;
+  discoveryQuery?: string;
+  googlePrimaryType?: string;
+  googlePrimaryTypeDisplayName?: string;
+  categorySource?: "GOOGLE_VERIFIED" | "GOOGLE_MAPS_DOM" | "WEBSITE_META" | "USER_SPECIFIED" | "UNKNOWN";
+  categoryConfidence?: number;
 }
 
 export interface FilterResult {

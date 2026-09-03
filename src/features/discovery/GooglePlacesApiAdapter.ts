@@ -54,7 +54,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       } catch (err) {
         console.warn(`Places API (New) failed for query "${queryVariant.textQuery}", trying classic fallback:`, err);
         try {
-          const fallbackBatch = await this.queryPlacesClassic(queryVariant.textQuery, plan.budget.maxResultsPerQuery);
+          const fallbackBatch = await this.queryPlacesClassic(queryVariant.textQuery, plan);
           for (const item of fallbackBatch) {
             if (!candidateMap.has(item.placeId)) {
               candidateMap.set(item.placeId, item);
@@ -73,18 +73,31 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
     return Array.from(candidateMap.values());
   }
 
+  /**
+   * Maps semantic categories strictly to verified Google Places API Table A place types
+   */
   private mapSemanticCategoryToGoogleType(category: SemanticCategory): string | undefined {
     switch (category) {
-      case "HEALTHCARE_WELLNESS":
+      case "DENTAL_HEALTHCARE":
         return "dentist";
-      case "BEAUTY_PERSONAL_CARE":
+      case "MEDICAL_CLINIC":
+        return "doctor";
+      case "HOME_SERVICES_HVAC":
+        return "hvac_contractor";
+      case "HOME_SERVICES_ROOFING":
+        return "roofing_contractor";
+      case "HOME_SERVICES_PLUMBING":
+        return "plumber";
+      case "BEAUTY_WELLNESS":
         return "beauty_salon";
       case "HOSPITALITY_FOOD":
         return "restaurant";
       case "AUTOMOTIVE_SERVICES":
         return "car_repair";
+      case "PROFESSIONAL_LEGAL":
+        return "lawyer";
       default:
-        return undefined;
+        return undefined; // No reliable single type; rely on text search without forcing invalid type
     }
   }
 
@@ -106,6 +119,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       "places.googleMapsUri",
       "places.reviews",
       "places.types",
+      "places.primaryType",
       "places.primaryTypeDisplayName",
     ].join(",");
 
@@ -114,13 +128,11 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       pageSize: Math.min(20, plan.budget.maxResultsPerQuery),
     };
 
-    // Map provider-neutral category to Google includedType if applicable
     const googleType = this.mapSemanticCategoryToGoogleType(category);
     if (googleType) {
       requestBody.includedType = googleType;
     }
 
-    // Apply location bias if coordinate centroid exists
     if (plan.location.latitude !== null && plan.location.longitude !== null) {
       requestBody.locationBias = {
         circle: {
@@ -128,12 +140,11 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
             latitude: plan.location.latitude,
             longitude: plan.location.longitude,
           },
-          radius: 15000.0, // 15km standard metro radius
+          radius: 15000.0,
         },
       };
     }
 
-    // Upstream quota optimization filter
     if (plan.providerOptimizationFilters?.minRating) {
       requestBody.minRating = plan.providerOptimizationFilters.minRating;
     }
@@ -168,7 +179,11 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       const phone = p.internationalPhoneNumber || p.nationalPhoneNumber || null;
       const formattedAddress = p.formattedAddress || "";
       const googleMapsUrl = p.googleMapsUri || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + " " + formattedAddress)}`;
-      const placeCategory = p.primaryTypeDisplayName?.text || p.types?.[0]?.replace(/_/g, " ") || undefined;
+      
+      // Extract Google's verified primary category with full provenance
+      const googlePrimaryType = p.primaryType || p.types?.[0] || undefined;
+      const googlePrimaryTypeDisplayName = p.primaryTypeDisplayName?.text || p.primaryTypeDisplayName || (googlePrimaryType ? googlePrimaryType.replace(/_/g, " ") : undefined);
+      const placeCategory = googlePrimaryTypeDisplayName || (googlePrimaryType ? googlePrimaryType.replace(/_/g, " ") : "Operating Business");
 
       const reviews: RawReviewTimestamp[] = [];
       if (Array.isArray(p.reviews)) {
@@ -190,6 +205,12 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
         formattedAddress,
         googleMapsUrl,
         reviews,
+        discoveryNiche: plan.originalNiche,
+        discoveryQuery: query,
+        googlePrimaryType,
+        googlePrimaryTypeDisplayName,
+        categorySource: "GOOGLE_VERIFIED",
+        categoryConfidence: 1.0,
       });
     }
 
@@ -199,7 +220,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
   /**
    * Google Places API (Classic) Text Search & Place Details Fallback
    */
-  private async queryPlacesClassic(query: string, maxResults: number): Promise<RawBusinessInput[]> {
+  private async queryPlacesClassic(query: string, plan: DiscoveryPlan): Promise<RawBusinessInput[]> {
     const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
       query
     )}&key=${this.apiKey}`;
@@ -214,7 +235,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       throw new Error(`Google Places API returned status: ${data.status} - ${data.error_message || ""}`);
     }
 
-    const rawResults = (data.results || []).slice(0, maxResults);
+    const rawResults = (data.results || []).slice(0, plan.budget.maxResultsPerQuery);
     const results: RawBusinessInput[] = [];
 
     for (const item of rawResults) {
@@ -225,7 +246,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
 
       if (placeId) {
         try {
-          const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=website,formatted_phone_number,international_phone_number,url,reviews&key=${this.apiKey}`;
+          const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=website,formatted_phone_number,international_phone_number,url,reviews,types&key=${this.apiKey}`;
           const detailRes = await fetch(detailsUrl);
           if (detailRes.ok) {
             const detailData = await detailRes.json();
@@ -248,11 +269,13 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
 
       const rating = typeof item.rating === "number" ? item.rating : 0;
       const reviewCount = typeof item.user_ratings_total === "number" ? item.user_ratings_total : 0;
+      const googlePrimaryType = item.types?.[0] || undefined;
+      const placeCategory = googlePrimaryType ? googlePrimaryType.replace(/_/g, " ") : "Operating Business";
 
       results.push({
         placeId: placeId || `gplace_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         name: item.name,
-        category: item.types?.[0]?.replace(/_/g, " ") || undefined,
+        category: placeCategory,
         rating,
         reviewCount,
         websiteUrl,
@@ -260,6 +283,12 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
         formattedAddress: item.formatted_address || "",
         googleMapsUrl: `https://www.google.com/maps/place/?q=place_id:${placeId}`,
         reviews,
+        discoveryNiche: plan.originalNiche,
+        discoveryQuery: query,
+        googlePrimaryType,
+        googlePrimaryTypeDisplayName: placeCategory,
+        categorySource: "GOOGLE_VERIFIED",
+        categoryConfidence: 0.9,
       });
     }
 

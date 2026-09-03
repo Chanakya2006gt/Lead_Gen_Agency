@@ -1,4 +1,4 @@
-import { chromium } from "playwright";
+import { chromium, Browser, Page } from "playwright";
 import { RawBusinessInput, RawReviewTimestamp } from "@/features/qualification/UniversalFilterService";
 import { IDiscoveryAdapter, DiscoveryParams, DiscoveryPlan } from "./types";
 import { BusinessIdentityResolver } from "@/features/identity/BusinessIdentityResolver";
@@ -8,6 +8,11 @@ import { DiscoveryStrategyBuilder } from "./DiscoveryStrategyBuilder";
 
 export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
   public readonly name = "LiveGoogleMapsAdapter";
+  private isHeadless: boolean;
+
+  constructor(isHeadless: boolean = true) {
+    this.isHeadless = isHeadless;
+  }
 
   public async discover(planOrParams: DiscoveryPlan | DiscoveryParams): Promise<RawBusinessInput[]> {
     let plan: DiscoveryPlan;
@@ -24,130 +29,147 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
       });
     }
 
-    const browser = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-blink-features=AutomationControlled",
-        "--lang=en-US",
-      ],
-    });
-
-    const context = await browser.newContext({
-      viewport: { width: 1440, height: 900 },
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-      locale: "en-US",
-      extraHTTPHeaders: {
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-    });
-
     const candidateMap = new Map<string, RawBusinessInput>();
-    const maxCalls = Math.min(plan.queries.length, plan.budget.maxProviderCalls);
+    let browser: Browser | null = null;
 
     try {
-      for (let qIdx = 0; qIdx < maxCalls; qIdx++) {
-        const q = plan.queries[qIdx];
-        const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(q.textQuery)}?hl=en`;
-        const page = await context.newPage();
+      browser = await chromium.launch({
+        headless: this.isHeadless,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-blink-features=AutomationControlled",
+          "--disable-web-security",
+        ],
+      });
+
+      const context = await browser.newContext({
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        viewport: { width: 1280, height: 800 },
+        locale: "en-US",
+      });
+
+      const page = await context.newPage();
+
+      const maxQueries = Math.min(plan.queries.length, plan.budget.maxProviderCalls);
+
+      for (let qIdx = 0; qIdx < maxQueries; qIdx++) {
+        const queryVariant = plan.queries[qIdx];
+        const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(queryVariant.textQuery)}`;
 
         try {
           await page.goto(searchUrl, { waitUntil: "domcontentloaded", timeout: 25000 });
 
-          // Handle Google Cookie / Consent dialogs
+          // Accept Google Cookies if consent banner appears
           try {
-            const consentButtons = [
-              'button:has-text("Accept all")',
-              'button:has-text("I agree")',
-              'button:has-text("Reject all")',
-              'form[action*="consent"] button',
-            ];
-            for (const btnSelector of consentButtons) {
-              const btn = page.locator(btnSelector).first();
-              if (await btn.isVisible({ timeout: 1500 })) {
-                await btn.click();
-                await page.waitForTimeout(1000);
-                break;
-              }
+            const consentBtn = await page.$('button[aria-label*="Accept"], form[action*="consent"] button');
+            if (consentBtn) {
+              await consentBtn.click();
+              await page.waitForTimeout(1000);
             }
-          } catch {
-            // No consent modal
-          }
+          } catch {}
 
           // Wait for feed container
           try {
-            await page.waitForSelector('div[role="feed"], div.Nv2PK, a.hfpxzc, a[href*="/maps/place/"]', {
+            await page.waitForSelector('div[role="feed"], div[aria-label*="Results for"], a[href*="/maps/place/"]', {
               timeout: 10000,
             });
           } catch {
-            // Continue
+            continue;
           }
 
-          // Scroll feed container
+          // Progressive scroll
           const feedSelector = 'div[role="feed"]';
-          for (let i = 0; i < 4; i++) {
-            await page.evaluate((sel) => {
-              const feed = document.querySelector(sel);
-              if (feed) {
-                feed.scrollTop = feed.scrollHeight;
-              } else {
-                window.scrollBy(0, 1200);
-              }
-            }, feedSelector);
-            await page.waitForTimeout(1000);
+          const feedExists = await page.$(feedSelector);
+
+          if (feedExists) {
+            for (let i = 0; i < 3; i++) {
+              await page.evaluate((sel) => {
+                const el = document.querySelector(sel);
+                if (el) el.scrollTop += 1500;
+              }, feedSelector);
+              await page.waitForTimeout(1200);
+            }
           }
 
-          // Extract listing items from DOM
-          const rawPlaces = await page.evaluate((max) => {
-            const items: any[] = [];
-            const cards = Array.from(document.querySelectorAll('div.Nv2PK, div[role="article"]'));
+          // Extract Places with exact DOM Category Subtitle parsing
+          const rawPlaces = await page.evaluate((maxItems) => {
+            const items: {
+              name: string;
+              category?: string;
+              rating: number;
+              reviewCount: number;
+              websiteUrl: string | null;
+              phone: string | null;
+              googleMapsUrl: string;
+              addressSnippet: string | null;
+            }[] = [];
 
-            if (cards.length > 0) {
-              for (const card of cards) {
-                if (items.length >= max) break;
+            const cards = document.querySelectorAll('div[role="feed"] > div, div.Nv2PK');
 
-                const linkEl = card.querySelector('a.hfpxzc, a[href*="/maps/place/"]') as HTMLAnchorElement | null;
-                const nameEl = card.querySelector('.fontHeadlineSmall, .qBF1Pd, [role="heading"]');
-                const name = linkEl?.getAttribute("aria-label") || nameEl?.textContent?.trim() || "";
+            for (const card of Array.from(cards)) {
+              if (items.length >= maxItems) break;
 
-                if (!name || items.some((p) => p.name === name)) continue;
+              const linkEl = card.querySelector('a[href*="/maps/place/"]') as HTMLAnchorElement | null;
+              const titleEl = card.querySelector('div.fontHeadlineSmall, div.qBF1Pd, div.NrDZNb') as HTMLElement | null;
 
-                const href = linkEl?.href || "";
-                const text = card.textContent || "";
+              if (!linkEl || !titleEl) continue;
 
-                const ratingEl = card.querySelector('.MW4etd, [aria-label*="stars"], [aria-label*="star"]');
-                const ratingMatch = (ratingEl?.textContent || text).match(/([1-5]\.\d)/);
-                if (!ratingMatch) continue;
-                const rating = parseFloat(ratingMatch[1]);
+              const name = titleEl.innerText?.trim();
+              const href = linkEl.href;
+              if (!name || !href) continue;
 
-                const reviewEl = card.querySelector('.UY7F9, [aria-label*="reviews"]');
-                const reviewText = reviewEl?.textContent || text;
-                const reviewCountMatch = reviewText.match(/\(([\d,]+)\)/) || reviewText.match(/([\d,]+)\s+reviews/i);
-                if (!reviewCountMatch) continue;
-                const reviewCount = parseInt(reviewCountMatch[1].replace(/,/g, ""), 10);
+              // Extract Rating & Reviews
+              let rating = 0;
+              let reviewCount = 0;
+              const ariaLabel = card.querySelector('span[role="img"]')?.getAttribute("aria-label") || "";
+              const ratingMatch = ariaLabel.match(/([0-9.]+)\s*stars?/i) || card.textContent?.match(/([0-9.]+)\s*★/);
+              if (ratingMatch) rating = parseFloat(ratingMatch[1]) || 0;
 
-                const websiteBtn = card.querySelector('a[data-value="Website"], a.lcr4fd, a[aria-label*="website" i]');
-                const websiteUrl = websiteBtn ? (websiteBtn as HTMLAnchorElement).href : null;
+              const reviewMatch = card.textContent?.match(/\(([0-9,]+)\)/) || ariaLabel.match(/([0-9,]+)\s*reviews?/i);
+              if (reviewMatch) reviewCount = parseInt(reviewMatch[1].replace(/,/g, ""), 10) || 0;
 
-                const phoneMatch = text.match(/(\+?\d[\d\s\-()]{8,}\d)/);
-                const phone = phoneMatch ? phoneMatch[1].trim() : null;
-
-                const addrMatch = text.match(/·\s*([^·\n]+(?:St|Ave|Rd|Rd\.|Road|Street|Blvd|Lane|Nagar|Colony|Highway|Circle|Cross|Floor|Phase|Ext|Zone|Industrial|Telangana|Texas|TX|CA|UK|India)[^·\n]*)/i);
-                const addressSnippet = addrMatch ? addrMatch[1].trim() : "";
-
-                items.push({
-                  name,
-                  rating,
-                  reviewCount,
-                  websiteUrl,
-                  phone,
-                  googleMapsUrl: href,
-                  addressSnippet,
-                });
+              // Extract Real Category Subtitle from DOM (Text before the first dot '·')
+              let extractedCategory = "";
+              const subtitleContainer = card.querySelector('div.W4Efsd');
+              if (subtitleContainer) {
+                const subText = subtitleContainer.textContent || "";
+                const parts = subText.split("·");
+                if (parts.length > 0) {
+                  const rawCat = parts[0].replace(/[0-9.★()]/g, "").trim();
+                  if (rawCat.length > 2 && rawCat.length < 50) {
+                    extractedCategory = rawCat;
+                  }
+                }
               }
+
+              // Extract Website & Phone
+              let websiteUrl: string | null = null;
+              let phone: string | null = null;
+              const siteLink = card.querySelector('a[data-value*="http"], a[aria-label*="Website"]') as HTMLAnchorElement | null;
+              if (siteLink && siteLink.href && !siteLink.href.includes("google.com")) {
+                websiteUrl = siteLink.href;
+              }
+
+              const text = card.textContent || "";
+              const phoneMatch = text.match(/(?:\+?[0-9]{1,4}[ -]?)?\(?[0-9]{3}\)?[ -]?[0-9]{3}[ -]?[0-9]{4}/);
+              if (phoneMatch) phone = phoneMatch[0];
+
+              const addrMatch = text.match(/·\s*([^·\n]+(?:St|Ave|Rd|Rd\.|Road|Street|Blvd|Lane|Nagar|Colony|Highway|Circle|Cross|Floor|Phase|Ext|Zone|Industrial|Telangana|Texas|TX|CA|UK|India)[^·\n]*)/i);
+              const addressSnippet = addrMatch ? addrMatch[1].trim() : null;
+
+              items.push({
+                name,
+                category: extractedCategory || undefined,
+                rating,
+                reviewCount,
+                websiteUrl,
+                phone,
+                googleMapsUrl: href,
+                addressSnippet,
+              });
             }
             return items;
           }, plan.budget.maxResultsPerQuery);
@@ -164,7 +186,8 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
               candidateMap.set(placeId, {
                 placeId,
                 name: item.name,
-                category: plan.originalNiche,
+                // INVARIANT: Do not overwrite category with plan.originalNiche
+                category: item.category || "Operating Business",
                 rating: item.rating,
                 reviewCount: item.reviewCount,
                 websiteUrl: item.websiteUrl,
@@ -172,6 +195,11 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
                 formattedAddress: item.addressSnippet || plan.location.canonicalName,
                 googleMapsUrl: item.googleMapsUrl,
                 reviews: [],
+                discoveryNiche: plan.originalNiche,
+                discoveryQuery: queryVariant.textQuery,
+                googlePrimaryTypeDisplayName: item.category || undefined,
+                categorySource: item.category ? "GOOGLE_MAPS_DOM" : "UNKNOWN",
+                categoryConfidence: item.category ? 0.85 : 0.3,
               });
 
               if (candidateMap.size >= plan.budget.maxTotalCandidates) {
@@ -179,8 +207,8 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
               }
             }
           }
-        } finally {
-          await page.close();
+        } catch (err) {
+          console.warn(`Live Maps search failed for query "${queryVariant.textQuery}":`, err);
         }
 
         if (candidateMap.size >= plan.budget.maxTotalCandidates) {
@@ -188,7 +216,7 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
         }
       }
     } finally {
-      await browser.close();
+      if (browser) await browser.close();
     }
 
     return Array.from(candidateMap.values());

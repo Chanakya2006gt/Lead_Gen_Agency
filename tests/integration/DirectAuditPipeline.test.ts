@@ -14,8 +14,8 @@ describe("Direct Audit Pipeline & SSRF Security Suite", () => {
 
   it("Invariant 2: SSRF Pre-flight rejects cloud metadata endpoint (169.254.169.254)", async () => {
     await expect(
-      DirectAuditService.validateUrlSecurity("http://169.254.169.254/latest/meta-data/")
-    ).rejects.toThrow(/Forbidden|restricted private IP|blocked/i);
+      DirectAuditService.validateUrlSecurity("http://169.254.169.254/latest/meta-data")
+    ).rejects.toThrow(/SSRF Defense|Forbidden|restricted private IP|cloud-metadata|blocked/i);
   });
 
   it("Invariant 3: SSRF Pre-flight permits valid public domain URLs", async () => {

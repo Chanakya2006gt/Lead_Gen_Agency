@@ -20,6 +20,12 @@ export interface SynthesizerParams {
   googleMapsUrl?: string | null;
   auditTelemetry?: AuditTelemetry | null;
   websiteTextSnippet?: string | null;
+  discoveryNiche?: string;
+  discoveryQuery?: string;
+  googlePrimaryType?: string;
+  googlePrimaryTypeDisplayName?: string;
+  categorySource?: "GOOGLE_VERIFIED" | "GOOGLE_MAPS_DOM" | "WEBSITE_META" | "USER_SPECIFIED" | "UNKNOWN";
+  categoryConfidence?: number;
 }
 
 export class DossierSynthesizer {
@@ -232,6 +238,12 @@ Output a 2-sentence executive summary highlighting their exact commercial bottle
       identifiedStrengths,
       identifiedBottlenecks,
       provenance,
+      discoveryNiche: params.discoveryNiche,
+      discoveryQuery: params.discoveryQuery,
+      googlePrimaryType: params.googlePrimaryType,
+      googlePrimaryTypeDisplayName: params.googlePrimaryTypeDisplayName,
+      categorySource: params.categorySource,
+      categoryConfidence: params.categoryConfidence,
       recommendedPitch: {
         coreAngle,
         suggestedScope,

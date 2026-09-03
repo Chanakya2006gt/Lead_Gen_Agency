@@ -20,7 +20,7 @@ interface NicheTaxonomyRule {
 export class DiscoveryStrategyBuilder {
   private static readonly TAXONOMY_RULES: Record<string, NicheTaxonomyRule> = {
     dental: {
-      category: "HEALTHCARE_WELLNESS",
+      category: "DENTAL_HEALTHCARE",
       categoryEquivalents: ["Dentists", "Dental Hospital"],
       commercialVariants: ["Private Dental Clinic", "Multispeciality Dental Clinic"],
       serviceSpecialties: [
@@ -30,8 +30,18 @@ export class DiscoveryStrategyBuilder {
       ],
       prohibitedExclusions: ["college", "school", "university", "equipment", "supplies", "distributor", "association"],
     },
+    medical: {
+      category: "MEDICAL_CLINIC",
+      categoryEquivalents: ["Doctors", "Speciality Clinics", "Polyclinics"],
+      commercialVariants: ["Private Medical Clinic", "Specialist Consultation Center"],
+      serviceSpecialties: [
+        { query: "Cardiology Consultation", specialty: "CARDIOLOGY" },
+        { query: "Dermatology Specialist", specialty: "DERMATOLOGY" },
+      ],
+      prohibitedExclusions: ["college", "civil hospital", "phc", "dispensary"],
+    },
     hvac: {
-      category: "HOME_SERVICES",
+      category: "HOME_SERVICES_HVAC",
       categoryEquivalents: ["HVAC Contractors", "Air Conditioning Services"],
       commercialVariants: ["Commercial HVAC Services", "Emergency HVAC Contractors"],
       serviceSpecialties: [
@@ -41,7 +51,7 @@ export class DiscoveryStrategyBuilder {
       prohibitedExclusions: ["parts warehouse", "wholesale", "training institute"],
     },
     roofing: {
-      category: "HOME_SERVICES",
+      category: "HOME_SERVICES_ROOFING",
       categoryEquivalents: ["Roofing Contractors", "Roof Replacement Specialists"],
       commercialVariants: ["Commercial Roofing Contractors", "Residential Roofing Specialists"],
       serviceSpecialties: [
@@ -51,7 +61,7 @@ export class DiscoveryStrategyBuilder {
       prohibitedExclusions: ["supplies", "materials depot", "wholesale"],
     },
     salon: {
-      category: "BEAUTY_PERSONAL_CARE",
+      category: "BEAUTY_WELLNESS",
       categoryEquivalents: ["Hair Salons", "Beauty Parlours"],
       commercialVariants: ["Luxury Hair & Skin Salon", "Premium Beauty Studio"],
       serviceSpecialties: [
@@ -73,13 +83,16 @@ export class DiscoveryStrategyBuilder {
   };
 
   /**
-   * Classify user niche into coarse semantic category
+   * Classify user niche into precise semantic category
    */
   public static classifySemanticCategory(niche: string): SemanticCategory {
     const raw = niche.toLowerCase();
-    if (/dent|clinic|doctor|hospital|physio|derma|health/.test(raw)) return "HEALTHCARE_WELLNESS";
-    if (/hvac|ac repair|roof|plumb|electric|contractor|solar/.test(raw)) return "HOME_SERVICES";
-    if (/salon|beauty|spa|hair|aesthetics|makeup/.test(raw)) return "BEAUTY_PERSONAL_CARE";
+    if (/dent/.test(raw)) return "DENTAL_HEALTHCARE";
+    if (/clinic|doctor|hospital|physio|derma|health|medical/.test(raw)) return "MEDICAL_CLINIC";
+    if (/hvac|ac repair|air condition/.test(raw)) return "HOME_SERVICES_HVAC";
+    if (/roof/.test(raw)) return "HOME_SERVICES_ROOFING";
+    if (/plumb/.test(raw)) return "HOME_SERVICES_PLUMBING";
+    if (/salon|beauty|spa|hair|aesthetics|makeup/.test(raw)) return "BEAUTY_WELLNESS";
     if (/manufactur|machin|fabricat|industrial|forging|engineering/.test(raw)) return "INDUSTRIAL_MANUFACTURING";
     if (/law|legal|attorney|account|audit|cpa/.test(raw)) return "PROFESSIONAL_LEGAL";
     if (/hotel|restaurant|cafe|bakery|catering/.test(raw)) return "HOSPITALITY_FOOD";

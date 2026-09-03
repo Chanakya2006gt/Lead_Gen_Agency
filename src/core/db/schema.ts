@@ -51,6 +51,12 @@ export interface BusinessDossier {
   identifiedStrengths: string[];
   identifiedBottlenecks: string[];
   provenance?: SignalProvenance;
+  discoveryNiche?: string;
+  discoveryQuery?: string;
+  googlePrimaryType?: string;
+  googlePrimaryTypeDisplayName?: string;
+  categorySource?: "GOOGLE_VERIFIED" | "GOOGLE_MAPS_DOM" | "WEBSITE_META" | "USER_SPECIFIED" | "UNKNOWN";
+  categoryConfidence?: number;
   recommendedPitch: {
     coreAngle: string;
     suggestedScope: string;
@@ -148,4 +154,3 @@ export type InsertDiscoveryScan = typeof discoveryScans.$inferInsert;
 export type Lead = typeof leads.$inferSelect;
 export type InsertLead = typeof leads.$inferInsert;
 export type LeadObservation = typeof leadObservations.$inferSelect;
-export type InsertLeadObservation = typeof leadObservations.$inferInsert;

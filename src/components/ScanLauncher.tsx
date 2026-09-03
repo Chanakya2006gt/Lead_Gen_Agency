@@ -87,7 +87,7 @@ export function ScanLauncher({
   // Direct URL Teardown Mode State
   const [directUrl, setDirectUrl] = useState("");
   const [directName, setDirectName] = useState("");
-  const [directCategory, setDirectCategory] = useState("Dental Clinic");
+  const [directCategory, setDirectCategory] = useState("");
   const [isAuditingDirect, setIsAuditingDirect] = useState(false);
 
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
@@ -557,7 +557,7 @@ export function ScanLauncher({
               type="text"
               value={directCategory}
               onChange={(e) => setDirectCategory(e.target.value)}
-              placeholder="e.g. Dental Clinic"
+              placeholder="Auto-detected if empty (e.g. Dental Clinic)"
               className="w-full px-3.5 py-2 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-100 text-xs focus:outline-none focus:border-emerald-400 transition"
             />
           </div>

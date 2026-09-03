@@ -250,7 +250,8 @@ export class ScanPipelineService {
             const dossier = await DossierSynthesizer.synthesize(
               {
                 name: business.name,
-                category: business.category || options.niche,
+                // INVARIANT: Never overwrite business category with user search query
+                category: business.category || "Operating Business",
                 rating: filterResult.rating,
                 reviewCount: filterResult.reviewCount,
                 reviewTrend: filterResult.reviewTrend,
@@ -264,6 +265,12 @@ export class ScanPipelineService {
                 formattedAddress: business.formattedAddress,
                 googleMapsUrl: business.googleMapsUrl,
                 auditTelemetry,
+                discoveryNiche: business.discoveryNiche || options.niche,
+                discoveryQuery: business.discoveryQuery || options.niche,
+                googlePrimaryType: business.googlePrimaryType,
+                googlePrimaryTypeDisplayName: business.googlePrimaryTypeDisplayName,
+                categorySource: business.categorySource || "UNKNOWN",
+                categoryConfidence: business.categoryConfidence || 0.5,
               },
               process.env.OPENAI_API_KEY
             );
