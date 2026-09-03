@@ -1,5 +1,8 @@
 import { RawBusinessInput, RawReviewTimestamp } from "@/features/qualification/UniversalFilterService";
-import { IDiscoveryAdapter, DiscoveryParams } from "./types";
+import { IDiscoveryAdapter, DiscoveryParams, DiscoveryPlan, SemanticCategory } from "./types";
+import { LocationResolver } from "./LocationResolver";
+import { MarketContextProvider } from "@/features/commercial/MarketContext";
+import { DiscoveryStrategyBuilder } from "./DiscoveryStrategyBuilder";
 
 export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
   public readonly name = "GooglePlacesApiAdapter";
@@ -14,34 +17,82 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       null;
   }
 
-  public async discover(params: DiscoveryParams): Promise<RawBusinessInput[]> {
-    const { niche, location, maxResults = 20 } = params;
-    const query = `${niche} in ${location}`;
+  public async discover(planOrParams: DiscoveryPlan | DiscoveryParams): Promise<RawBusinessInput[]> {
+    let plan: DiscoveryPlan;
+    if ("queries" in planOrParams) {
+      plan = planOrParams;
+    } else {
+      const location = LocationResolver.resolve(planOrParams.location);
+      const marketContext = MarketContextProvider.resolve(planOrParams.location);
+      plan = DiscoveryStrategyBuilder.buildPlan({
+        niche: planOrParams.niche,
+        location,
+        marketContext,
+        mode: planOrParams.mode || "STANDARD",
+      });
+    }
 
     if (!this.apiKey) {
       throw new Error("GOOGLE_MAPS_API_KEY is not configured in environment variables.");
     }
 
-    // Try Google Places API (New) first
-    try {
-      const placesNew = await this.queryPlacesNew(query, maxResults);
-      if (placesNew && placesNew.length > 0) {
-        return placesNew;
+    const candidateMap = new Map<string, RawBusinessInput>();
+    const maxCalls = Math.min(plan.queries.length, plan.budget.maxProviderCalls);
+
+    for (let i = 0; i < maxCalls; i++) {
+      const queryVariant = plan.queries[i];
+      try {
+        const batch = await this.queryPlacesNew(queryVariant.textQuery, queryVariant.semanticCategory, plan);
+        for (const item of batch) {
+          if (!candidateMap.has(item.placeId)) {
+            candidateMap.set(item.placeId, item);
+          }
+          if (candidateMap.size >= plan.budget.maxTotalCandidates) {
+            break;
+          }
+        }
+      } catch (err) {
+        console.warn(`Places API (New) failed for query "${queryVariant.textQuery}", trying classic fallback:`, err);
+        try {
+          const fallbackBatch = await this.queryPlacesClassic(queryVariant.textQuery, plan.budget.maxResultsPerQuery);
+          for (const item of fallbackBatch) {
+            if (!candidateMap.has(item.placeId)) {
+              candidateMap.set(item.placeId, item);
+            }
+          }
+        } catch (classicErr) {
+          console.warn(`Places API (Classic) also failed:`, classicErr);
+        }
       }
-    } catch (err) {
-      console.warn("Google Places API (New) request failed, trying Classic Places API:", err);
+
+      if (candidateMap.size >= plan.budget.maxTotalCandidates) {
+        break;
+      }
     }
 
-    // Fallback to Google Places API (Classic Text Search)
-    const placesClassic = await this.queryPlacesClassic(query, maxResults);
-    return placesClassic;
+    return Array.from(candidateMap.values());
+  }
+
+  private mapSemanticCategoryToGoogleType(category: SemanticCategory): string | undefined {
+    switch (category) {
+      case "HEALTHCARE_WELLNESS":
+        return "dentist";
+      case "BEAUTY_PERSONAL_CARE":
+        return "beauty_salon";
+      case "HOSPITALITY_FOOD":
+        return "restaurant";
+      case "AUTOMOTIVE_SERVICES":
+        return "car_repair";
+      default:
+        return undefined;
+    }
   }
 
   /**
    * Google Places API (New) Text Search
    * https://places.googleapis.com/v1/places:searchText
    */
-  private async queryPlacesNew(query: string, maxResults: number): Promise<RawBusinessInput[]> {
+  private async queryPlacesNew(query: string, category: SemanticCategory, plan: DiscoveryPlan): Promise<RawBusinessInput[]> {
     const url = "https://places.googleapis.com/v1/places:searchText";
     const fieldMask = [
       "places.id",
@@ -58,6 +109,35 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       "places.primaryTypeDisplayName",
     ].join(",");
 
+    const requestBody: any = {
+      textQuery: query,
+      pageSize: Math.min(20, plan.budget.maxResultsPerQuery),
+    };
+
+    // Map provider-neutral category to Google includedType if applicable
+    const googleType = this.mapSemanticCategoryToGoogleType(category);
+    if (googleType) {
+      requestBody.includedType = googleType;
+    }
+
+    // Apply location bias if coordinate centroid exists
+    if (plan.location.latitude !== null && plan.location.longitude !== null) {
+      requestBody.locationBias = {
+        circle: {
+          center: {
+            latitude: plan.location.latitude,
+            longitude: plan.location.longitude,
+          },
+          radius: 15000.0, // 15km standard metro radius
+        },
+      };
+    }
+
+    // Upstream quota optimization filter
+    if (plan.providerOptimizationFilters?.minRating) {
+      requestBody.minRating = plan.providerOptimizationFilters.minRating;
+    }
+
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -65,10 +145,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
         "X-Goog-Api-Key": this.apiKey!,
         "X-Goog-FieldMask": fieldMask,
       },
-      body: JSON.stringify({
-        textQuery: query,
-        pageSize: Math.min(20, maxResults),
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!res.ok) {
@@ -91,9 +168,8 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       const phone = p.internationalPhoneNumber || p.nationalPhoneNumber || null;
       const formattedAddress = p.formattedAddress || "";
       const googleMapsUrl = p.googleMapsUri || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name + " " + formattedAddress)}`;
-      const category = p.primaryTypeDisplayName?.text || p.types?.[0]?.replace(/_/g, " ") || undefined;
+      const placeCategory = p.primaryTypeDisplayName?.text || p.types?.[0]?.replace(/_/g, " ") || undefined;
 
-      // Extract ONLY real review timestamps returned by Google
       const reviews: RawReviewTimestamp[] = [];
       if (Array.isArray(p.reviews)) {
         for (const rev of p.reviews) {
@@ -106,7 +182,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       results.push({
         placeId,
         name,
-        category,
+        category: placeCategory,
         rating,
         reviewCount,
         websiteUrl,
@@ -121,7 +197,7 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
   }
 
   /**
-   * Google Places API (Classic) Text Search & Place Details
+   * Google Places API (Classic) Text Search & Place Details Fallback
    */
   private async queryPlacesClassic(query: string, maxResults: number): Promise<RawBusinessInput[]> {
     const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
@@ -147,7 +223,6 @@ export class GooglePlacesApiAdapter implements IDiscoveryAdapter {
       let phone: string | null = null;
       let reviews: RawReviewTimestamp[] = [];
 
-      // Fetch place details for website, phone, and real reviews if placeId exists
       if (placeId) {
         try {
           const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=website,formatted_phone_number,international_phone_number,url,reviews&key=${this.apiKey}`;

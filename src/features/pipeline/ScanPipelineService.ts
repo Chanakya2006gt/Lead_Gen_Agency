@@ -13,6 +13,11 @@ import { PlaywrightAuditEngine } from "@/features/auditor/PlaywrightAuditEngine"
 import { DossierSynthesizer } from "@/features/synthesis/DossierSynthesizer";
 import { BusinessIdentityResolver } from "@/features/identity/BusinessIdentityResolver";
 import { SecondaryDomainResolver } from "@/features/discovery/SecondaryDomainResolver";
+import { LocationResolver } from "@/features/discovery/LocationResolver";
+import { MarketContextProvider } from "@/features/commercial/MarketContext";
+import { DiscoveryStrategyBuilder } from "@/features/discovery/DiscoveryStrategyBuilder";
+import { CommercialEntityFilter } from "@/features/qualification/CommercialEntityFilter";
+import { DiscoveryMode, DiscoveryPlan } from "@/features/discovery/types";
 import crypto from "crypto";
 
 export interface ScanOptions {
@@ -20,6 +25,7 @@ export interface ScanOptions {
   location: string;
   radiusKm?: number;
   source?: "google_places" | "live_google_maps" | "serpapi" | "mock" | "apify" | "outscraper";
+  mode?: DiscoveryMode;
 }
 
 export class ScanPipelineService {
@@ -85,7 +91,17 @@ export class ScanPipelineService {
     const abortController = new AbortController();
     this.activeControllers.set(scanId, abortController);
 
-    // Select Discovery Adapter
+    // 1. Build Bounded, Provider-Neutral DiscoveryPlan
+    const resolvedLocation = LocationResolver.resolve(options.location);
+    const marketContext = MarketContextProvider.resolve(options.location);
+    const discoveryPlan: DiscoveryPlan = DiscoveryStrategyBuilder.buildPlan({
+      niche: options.niche,
+      location: resolvedLocation,
+      marketContext,
+      mode: options.mode || "COMMERCIAL",
+    });
+
+    // 2. Select Discovery Adapter
     let adapter: IDiscoveryAdapter;
     if (options.source === "google_places") {
       adapter = new GooglePlacesApiAdapter();
@@ -105,14 +121,10 @@ export class ScanPipelineService {
       }
     }
 
-    // Step A: Ingest raw business records
+    // Step A: Ingest raw business records via DiscoveryPlan
     let rawBusinesses: any[] = [];
     try {
-      rawBusinesses = await adapter.discover({
-        niche: options.niche,
-        location: options.location,
-        radiusKm: options.radiusKm || 15,
-      });
+      rawBusinesses = await adapter.discover(discoveryPlan);
     } catch (discoveryErr: any) {
       console.error(`Discovery adapter (${adapter.name}) failed:`, discoveryErr);
       if (!abortController.signal.aborted) {
@@ -146,8 +158,12 @@ export class ScanPipelineService {
     let qualifiedCount = 0;
 
     try {
-      // Step B: Filter qualified businesses using 13 Universal Invariants
-      const qualifiedItems = rawBusinesses
+      // Step B: Filter commercial entities and evaluate Universal Invariants
+      const commercialCandidates = rawBusinesses.filter(
+        (business) => CommercialEntityFilter.evaluate(business).isCommercial
+      );
+
+      const qualifiedItems = commercialCandidates
         .map((business) => ({ business, filterResult: UniversalFilterService.evaluate(business) }))
         .filter((item) => item.filterResult.qualified);
 

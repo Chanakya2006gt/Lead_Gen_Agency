@@ -13,6 +13,7 @@ const createScanSchema = z.object({
   location: z.string().min(2, "Location must be at least 2 characters"),
   radiusKm: z.number().int().min(1).max(100).default(15),
   source: z.enum(["google_places", "live_google_maps", "serpapi", "mock", "apify", "outscraper"]).default("google_places"),
+  mode: z.enum(["STANDARD", "COMMERCIAL", "EXHAUSTIVE"]).default("COMMERCIAL"),
 });
 
 export async function GET(request: Request) {
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
       location: validated.location,
       radiusKm: validated.radiusKm,
       source: validated.source,
+      mode: validated.mode,
     });
 
     return NextResponse.json(

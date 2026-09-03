@@ -1,5 +1,8 @@
 import { RawBusinessInput } from "@/features/qualification/UniversalFilterService";
-import { IDiscoveryAdapter, DiscoveryParams } from "./types";
+import { IDiscoveryAdapter, DiscoveryParams, DiscoveryPlan } from "./types";
+import { LocationResolver } from "./LocationResolver";
+import { MarketContextProvider } from "@/features/commercial/MarketContext";
+import { DiscoveryStrategyBuilder } from "./DiscoveryStrategyBuilder";
 
 export class SerpApiGoogleMapsAdapter implements IDiscoveryAdapter {
   public readonly name = "SerpApiGoogleMapsAdapter";
@@ -9,54 +12,74 @@ export class SerpApiGoogleMapsAdapter implements IDiscoveryAdapter {
     this.apiKey = apiKey || process.env.SERPAPI_API_KEY || null;
   }
 
-  public async discover(params: DiscoveryParams): Promise<RawBusinessInput[]> {
-    const { niche, location, maxResults = 15 } = params;
-    const query = `${niche} in ${location}`;
-
+  public async discover(planOrParams: DiscoveryPlan | DiscoveryParams): Promise<RawBusinessInput[]> {
     if (!this.apiKey) {
       throw new Error("SERPAPI_API_KEY is not configured in environment variables.");
     }
 
-    const searchUrl = `https://serpapi.com/search.json?engine=google_maps&q=${encodeURIComponent(
-      query
-    )}&api_key=${this.apiKey}`;
-
-    const res = await fetch(searchUrl);
-    if (!res.ok) {
-      throw new Error(`SerpApi HTTP ${res.status}: ${await res.text()}`);
-    }
-
-    const data = await res.json();
-    const rawPlaces = (data.local_results || []).slice(0, maxResults);
-    const results: RawBusinessInput[] = [];
-
-    for (const item of rawPlaces) {
-      const name = item.title || "";
-      if (!name) continue;
-
-      const placeId = item.place_id || `serp_${Buffer.from(name).toString("hex").substring(0, 16)}`;
-      const rating = typeof item.rating === "number" ? item.rating : 0;
-      const reviewCount = typeof item.reviews === "number" ? item.reviews : 0;
-      const websiteUrl = item.website || item.links?.website || null;
-      const phone = item.phone || null;
-      const formattedAddress = item.address || "";
-      const googleMapsUrl = item.link || null;
-      const category = item.type || item.category || undefined;
-
-      results.push({
-        placeId,
-        name,
-        category,
-        rating,
-        reviewCount,
-        websiteUrl,
-        phone,
-        formattedAddress,
-        googleMapsUrl,
-        reviews: [], // SerpAPI map local_results does not include full review timestamps
+    let plan: DiscoveryPlan;
+    if ("queries" in planOrParams) {
+      plan = planOrParams;
+    } else {
+      const location = LocationResolver.resolve(planOrParams.location);
+      const marketContext = MarketContextProvider.resolve(planOrParams.location);
+      plan = DiscoveryStrategyBuilder.buildPlan({
+        niche: planOrParams.niche,
+        location,
+        marketContext,
+        mode: planOrParams.mode || "STANDARD",
       });
     }
 
-    return results;
+    const candidateMap = new Map<string, RawBusinessInput>();
+    const maxCalls = Math.min(plan.queries.length, plan.budget.maxProviderCalls);
+
+    for (let i = 0; i < maxCalls; i++) {
+      const q = plan.queries[i];
+      const searchUrl = `https://serpapi.com/search.json?engine=google_maps&q=${encodeURIComponent(
+        q.textQuery
+      )}&api_key=${this.apiKey}`;
+
+      try {
+        const res = await fetch(searchUrl);
+        if (res.ok) {
+          const data = await res.json();
+          const rawPlaces = data.local_results || [];
+
+          for (const item of rawPlaces) {
+            const name = item.title || "";
+            if (!name) continue;
+
+            const placeId = item.place_id || `serp_${Buffer.from(name).toString("hex").substring(0, 16)}`;
+            if (!candidateMap.has(placeId)) {
+              candidateMap.set(placeId, {
+                placeId,
+                name,
+                category: item.type || item.category || plan.originalNiche,
+                rating: typeof item.rating === "number" ? item.rating : 0,
+                reviewCount: typeof item.reviews === "number" ? item.reviews : 0,
+                websiteUrl: item.website || item.links?.website || null,
+                phone: item.phone || null,
+                formattedAddress: item.address || plan.location.canonicalName,
+                googleMapsUrl: item.link || null,
+                reviews: [],
+              });
+
+              if (candidateMap.size >= plan.budget.maxTotalCandidates) {
+                break;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`SerpAPI error for query ${q.textQuery}:`, err);
+      }
+
+      if (candidateMap.size >= plan.budget.maxTotalCandidates) {
+        break;
+      }
+    }
+
+    return Array.from(candidateMap.values());
   }
 }
