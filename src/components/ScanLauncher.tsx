@@ -516,26 +516,39 @@ export function ScanLauncher({
               </select>
             </div>
 
-            {/* Submit Button */}
+            {/* Submit & Action Controls */}
             <div className="md:col-span-2 flex items-end gap-2">
               {isLoading ? (
-                <button
-                  type="button"
-                  onClick={onCancelScan}
-                  className="w-full py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-rose-900/20"
-                >
-                  <Square className="w-3.5 h-3.5 fill-current" />
-                  <span>Cancel</span>
-                </button>
+                <div className="flex items-center gap-1.5 w-full">
+                  <button
+                    data-testid="btn-launch-discovery"
+                    disabled
+                    className="flex-1 py-2 px-2 rounded-lg bg-indigo-600/80 text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-not-allowed opacity-90 shadow-lg shadow-indigo-950/40"
+                  >
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Scanning...</span>
+                  </button>
+                  {onCancelScan && (
+                    <button
+                      type="button"
+                      onClick={onCancelScan}
+                      title="Cancel active scan"
+                      className="py-2 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs flex items-center justify-center gap-1 transition cursor-pointer shadow-lg shadow-rose-900/30 shrink-0"
+                    >
+                      <Square className="w-3 h-3 fill-current" />
+                      <span>Cancel</span>
+                    </button>
+                  )}
+                </div>
               ) : (
                 <button
                   data-testid="btn-launch-discovery"
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-indigo-900/20 disabled:opacity-50"
+                  className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-indigo-900/30 disabled:opacity-50"
                 >
                   <Search className="w-3.5 h-3.5" />
-                  <span>Launch Plan</span>
+                  <span>Scan Market</span>
                 </button>
               )}
             </div>
