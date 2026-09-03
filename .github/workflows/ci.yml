@@ -1,0 +1,59 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Build, Lint & Automated Test Suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      NODE_ENV: test
+      PLAYWRIGHT_TEST: "1"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Next.js Lint
+        run: npm run lint
+
+      - name: Install Playwright Chromium & OS Dependencies
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Vitest Unit & Integration Test Suite
+        run: npm run test
+
+      - name: Run Next.js 15 Production Build (Zero-Secrets Check)
+        run: npm run build
+
+      - name: Run Playwright End-to-End Smoke & Quality Suite
+        run: npm run test:e2e
+
+      - name: Upload Playwright Test Artifacts on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7

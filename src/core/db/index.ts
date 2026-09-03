@@ -41,7 +41,6 @@ sqlite.exec(`
     formatted_address TEXT,
     phone TEXT,
     google_maps_url TEXT,
-    website_url TEXT,
     rating REAL NOT NULL,
     review_count INTEGER NOT NULL,
     previous_rating REAL,
@@ -63,6 +62,8 @@ sqlite.exec(`
     digital_gap_score INTEGER DEFAULT 0,
     opportunity_score INTEGER DEFAULT 0,
     confidence_score INTEGER DEFAULT 0,
+    commercial_fit_score INTEGER DEFAULT 0,
+    lead_attractiveness_score INTEGER DEFAULT 0,
     total_lead_score INTEGER DEFAULT 0,
     opportunity_type TEXT NOT NULL DEFAULT 'UNKNOWN',
     dossier TEXT,
@@ -136,6 +137,12 @@ try {
   }
   if (!existingColumns.has("unlinked_website_url")) {
     sqlite.exec("ALTER TABLE leads ADD COLUMN unlinked_website_url TEXT;");
+  }
+  if (!existingColumns.has("commercial_fit_score")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN commercial_fit_score INTEGER DEFAULT 0;");
+  }
+  if (!existingColumns.has("lead_attractiveness_score")) {
+    sqlite.exec("ALTER TABLE leads ADD COLUMN lead_attractiveness_score INTEGER DEFAULT 0;");
   }
 
   // Pre-Migration Deduplication: Find any existing duplicate place_id rows, merge observations, and delete duplicates

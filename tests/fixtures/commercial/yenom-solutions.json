@@ -1,0 +1,23 @@
+{
+  "name": "Yenom Solutions",
+  "category": "E-Commerce & Digital Commerce Platform",
+  "rating": 4.8,
+  "reviewCount": 45,
+  "formattedAddress": "Hyderabad, Telangana, India",
+  "hasWebsite": true,
+  "websiteUrl": "https://yenomsolutions.com",
+  "hasExistingEcommerce": true,
+  "hasOnlineOrdering": true,
+  "auditTelemetry": {
+    "viewportMetaPresent": true,
+    "hasHorizontalOverflow": false,
+    "hasSsl": true,
+    "brokenLinksCount": 0,
+    "jsConsoleErrorsCount": 0,
+    "initialLoadLatencyMs": 380,
+    "hasDirectClickToCall": true,
+    "hasWhatsAppDirectLink": true,
+    "hasInteractiveBookingForm": true,
+    "findings": []
+  }
+}

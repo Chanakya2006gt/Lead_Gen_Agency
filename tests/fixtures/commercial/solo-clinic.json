@@ -1,0 +1,21 @@
+{
+  "name": "Dr. Sharma Dental Aesthetics",
+  "category": "Dental Clinic",
+  "rating": 4.85,
+  "reviewCount": 160,
+  "formattedAddress": "Hanamkonda, Warangal, Telangana",
+  "hasWebsite": true,
+  "websiteUrl": "https://drsharmadental.com",
+  "auditTelemetry": {
+    "viewportMetaPresent": true,
+    "hasHorizontalOverflow": false,
+    "hasSsl": true,
+    "brokenLinksCount": 0,
+    "jsConsoleErrorsCount": 0,
+    "initialLoadLatencyMs": 350,
+    "hasDirectClickToCall": true,
+    "hasWhatsAppDirectLink": false,
+    "hasInteractiveBookingForm": false,
+    "findings": []
+  }
+}

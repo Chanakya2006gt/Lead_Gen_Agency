@@ -11,15 +11,17 @@ describe("DossierSynthesizer (Deterministic Grounded Pitch Formulation)", () => 
       reviewTrend: "GROWING",
       hasWebsite: false,
       websiteUrl: null,
-      phone: "+1 (555) 234-5678",
-      formattedAddress: "Dallas, TX",
+      phone: "+91 98765 43210",
+      formattedAddress: "Hyderabad, Telangana",
     });
 
     expect(dossier.opportunityType).toBe("WEBSITE");
     expect(dossier.overallLeadScore).toBeGreaterThan(80);
     expect(dossier.recommendedPitch.coreAngle).toContain("Summit Dental Clinic");
     expect(dossier.identifiedBottlenecks[0]).toContain("Zero official website");
-    expect(dossier.recommendedPitch.estimatedValueRange).toContain("$2,500 – $5,000");
+    expect(dossier.recommendedPitch.estimatedValueRange).toContain("₹");
+    expect(dossier.recommendedPitch.estimatedValueRange).not.toContain("$");
+    expect(dossier.recommendedPitch.estimatedValueRange).not.toContain("USD");
   });
 
   it("Synthesizes custom operational software angle for high-volume WhatsApp clinics", async () => {
@@ -31,8 +33,8 @@ describe("DossierSynthesizer (Deterministic Grounded Pitch Formulation)", () => 
       reviewTrend: "GROWING",
       hasWebsite: true,
       websiteUrl: "https://example.com",
-      phone: "+1 (555) 456-7890",
-      formattedAddress: "Phoenix, AZ",
+      phone: "+91 91234 56789",
+      formattedAddress: "Warangal, Telangana",
       auditTelemetry: {
         viewportMetaPresent: true,
         hasHorizontalOverflow: false,
@@ -56,6 +58,8 @@ describe("DossierSynthesizer (Deterministic Grounded Pitch Formulation)", () => 
 
     expect(dossier.opportunityType).toBe("CUSTOM_OPERATIONAL_SOFTWARE");
     expect(dossier.recommendedPitch.coreAngle).toContain("scheduling, WhatsApp intake");
-    expect(dossier.recommendedPitch.estimatedValueRange).toContain("$6,500 – $14,000");
+    expect(dossier.recommendedPitch.estimatedValueRange).toContain("₹");
+    expect(dossier.recommendedPitch.estimatedValueRange).not.toContain("$");
+    expect(dossier.recommendedPitch.estimatedValueRange).not.toContain("USD");
   });
 });

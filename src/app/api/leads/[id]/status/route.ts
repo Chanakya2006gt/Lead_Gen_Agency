@@ -21,7 +21,12 @@ export async function PATCH(
   try {
     const params = await props.params;
     const leadId = params.id;
-    const body = await request.json();
+    let body: any;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid or empty JSON body" }, { status: 400 });
+    }
     const validated = updateStatusSchema.parse(body);
 
     const updated = db

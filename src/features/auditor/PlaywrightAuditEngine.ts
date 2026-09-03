@@ -36,7 +36,7 @@ export class PlaywrightAuditEngine implements IAuditEngine {
    * 3. Cloud metadata endpoint defense (AWS, GCP, Azure, DigitalOcean)
    * 4. Multi-IP DNS lookup & comprehensive private IPv4/IPv6 CIDR filtering
    */
-  public async validateUrlSecurity(targetUrl: string, allowLocalhostForTesting: boolean = false): Promise<string> {
+  public static async validateUrlSecurity(targetUrl: string, allowLocalhostForTesting: boolean = false): Promise<string> {
     let parsed: URL;
     try {
       if (!/^https?:\/\//i.test(targetUrl)) {
@@ -90,7 +90,7 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     }
 
     for (const ip of addresses) {
-      if (this.isPrivateOrRestrictedIp(ip)) {
+      if (PlaywrightAuditEngine.isPrivateOrRestrictedIp(ip)) {
         // Only allow 127.0.0.1 or localhost if explicitly testing in test environment
         if (allowLocalhostForTesting && (ip === "127.0.0.1" || ip === "::1" || hostname === "localhost")) {
           continue;
@@ -102,11 +102,11 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     return parsed.toString();
   }
 
-  private isPrivateOrRestrictedIp(ip: string): boolean {
+  public static isPrivateOrRestrictedIp(ip: string): boolean {
     // Handle IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1 or ::ffff:10.0.0.1)
     if (ip.startsWith("::ffff:")) {
       const ipv4Part = ip.replace("::ffff:", "");
-      return this.isPrivateOrRestrictedIp(ipv4Part);
+      return PlaywrightAuditEngine.isPrivateOrRestrictedIp(ipv4Part);
     }
 
     if (net.isIPv4(ip)) {
@@ -141,7 +141,7 @@ export class PlaywrightAuditEngine implements IAuditEngine {
    * Phase 2: Desktop Viewport (1440x900, layout stability, console crashes, booking funnels, broken links)
    */
   public async auditUrl(rawUrl: string, allowLocalhostForTesting: boolean = false): Promise<AuditTelemetry> {
-    const targetUrl = await this.validateUrlSecurity(rawUrl, allowLocalhostForTesting);
+    const targetUrl = await PlaywrightAuditEngine.validateUrlSecurity(rawUrl, allowLocalhostForTesting);
     const browser = await this.getBrowser();
 
     const findings: AuditFinding[] = [];
@@ -338,7 +338,7 @@ export class PlaywrightAuditEngine implements IAuditEngine {
       try {
         const resolvedUrl = new URL(href, targetUrl).toString();
         // Validate target link before making HEAD request (prevent 2nd-hop SSRF)
-        await this.validateUrlSecurity(resolvedUrl, allowLocalhostForTesting);
+        await PlaywrightAuditEngine.validateUrlSecurity(resolvedUrl, allowLocalhostForTesting);
 
         const res = await desktopContext.request.head(resolvedUrl, { timeout: 3000 }).catch(() => null);
         if (res && res.status() >= 400) {

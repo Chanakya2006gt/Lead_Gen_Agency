@@ -1,0 +1,21 @@
+{
+  "name": "Precision Heavy Forgings Pvt Ltd",
+  "category": "Industrial Equipment Manufacturer",
+  "rating": 4.9,
+  "reviewCount": 72,
+  "formattedAddress": "Balanagar Industrial Area, Hyderabad, Telangana",
+  "hasWebsite": true,
+  "websiteUrl": "https://precisionforgings.in",
+  "auditTelemetry": {
+    "viewportMetaPresent": true,
+    "hasHorizontalOverflow": false,
+    "hasSsl": true,
+    "brokenLinksCount": 0,
+    "jsConsoleErrorsCount": 0,
+    "initialLoadLatencyMs": 400,
+    "hasDirectClickToCall": true,
+    "hasWhatsAppDirectLink": true,
+    "hasInteractiveBookingForm": false,
+    "findings": []
+  }
+}

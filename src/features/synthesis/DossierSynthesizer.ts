@@ -1,6 +1,7 @@
 import { BusinessDossier, AuditTelemetry, ReviewTrend, SignalProvenance } from "@/core/db/schema";
 import { OpportunityClassifier } from "@/features/qualification/OpportunityClassifier";
 import { ScoringEngine } from "@/features/qualification/ScoringEngine";
+import { CommercialEconomicsEngine } from "@/features/commercial/CommercialEconomicsEngine";
 
 export interface SynthesizerParams {
   name: string;
@@ -18,6 +19,7 @@ export interface SynthesizerParams {
   formattedAddress?: string | null;
   googleMapsUrl?: string | null;
   auditTelemetry?: AuditTelemetry | null;
+  websiteTextSnippet?: string | null;
 }
 
 export class DossierSynthesizer {
@@ -45,7 +47,21 @@ export class DossierSynthesizer {
       opportunityType,
     });
 
-    // 1. Signal Provenance & Confidence Ledger
+    // 1. Run Market-Aware Commercial Economics Engine
+    const commercialProfile = CommercialEconomicsEngine.analyze({
+      name: params.name,
+      category: params.category,
+      rating: params.rating,
+      reviewCount: params.reviewCount,
+      formattedAddress: params.formattedAddress,
+      hasWebsite: params.hasWebsite,
+      isGbpDisconnected: params.isGbpDisconnected,
+      auditTelemetry: params.auditTelemetry,
+      websiteTextSnippet: params.websiteTextSnippet,
+      serviceType: opportunityType,
+    });
+
+    // 2. Signal Provenance & Confidence Ledger
     const provenance: SignalProvenance = {
       ratingConfidence: "high",
       reviewVelocityConfidence: params.reviewTrend !== "UNKNOWN" ? "observed" : "unknown",
@@ -53,7 +69,7 @@ export class DossierSynthesizer {
       auditConfidence: params.auditTelemetry ? "empirical" : "pending",
     };
 
-    // 2. Grounded Deterministic Rules Engine
+    // 3. Grounded Deterministic Rules Engine
     const identifiedStrengths = [
       `Established market reputation with ${params.rating}★ rating across ${params.reviewCount} verified Google reviews.`,
     ];
@@ -74,9 +90,6 @@ export class DossierSynthesizer {
       identifiedBottlenecks.push(
         "Local Search Ranking Penalty: Missing website link suppresses Google Maps 3-pack local search visibility."
       );
-      identifiedBottlenecks.push(
-        "Mobile Conversion Drop: High-intent searchers viewing Google Maps profile cannot access full service details or book online."
-      );
     } else if (!params.hasWebsite) {
       identifiedBottlenecks.push(
         "Zero official website presence on Google Business Profile, forfeiting high-intent mobile searchers to competitors."
@@ -85,14 +98,36 @@ export class DossierSynthesizer {
         "Lacks direct digital intake, forcing all potential customers to call during office hours only."
       );
     } else if (params.auditTelemetry) {
-      const { findings, hasSsl, viewportMetaPresent, hasHorizontalOverflow, hasDirectClickToCall, hasInteractiveBookingForm } =
-        params.auditTelemetry;
+      const {
+        findings,
+        hasSsl,
+        viewportMetaPresent,
+        hasHorizontalOverflow,
+        hasDirectClickToCall,
+        hasWhatsAppDirectLink,
+        hasInteractiveBookingForm,
+        initialLoadLatencyMs,
+      } = params.auditTelemetry;
 
-      if (!hasSsl) identifiedBottlenecks.push("Security Warning: Insecure HTTP protocol without SSL certificate.");
-      if (!viewportMetaPresent) identifiedBottlenecks.push("Mobile Friction: Missing responsive viewport meta tag.");
-      if (hasHorizontalOverflow) identifiedBottlenecks.push("UX Breakdown: Horizontal page layout overflow on mobile screens.");
-      if (!hasDirectClickToCall) identifiedBottlenecks.push("Conversion Leak: No direct 'tel:' click-to-call link for phone visitors.");
-      if (!hasInteractiveBookingForm) identifiedBottlenecks.push("Operational Gap: No 24/7 interactive online booking or calendar funnel.");
+      if (!hasSsl) {
+        identifiedBottlenecks.push("Security Warning: Insecure HTTP protocol without SSL certificate.");
+      }
+
+      if (!viewportMetaPresent || hasHorizontalOverflow) {
+        identifiedBottlenecks.push("Mobile Friction: Missing responsive viewport meta tag or horizontal layout overflow.");
+      }
+
+      if (!hasInteractiveBookingForm) {
+        identifiedBottlenecks.push("Operational Gap: No 24/7 interactive online booking or calendar funnel.");
+      }
+
+      if (!hasDirectClickToCall && !hasWhatsAppDirectLink) {
+        identifiedBottlenecks.push("Conversion Leak: No direct 1-tap call or WhatsApp consultation link for phone visitors.");
+      }
+
+      if (initialLoadLatencyMs > 2500) {
+        identifiedBottlenecks.push(`Performance Bottleneck: Slow initial load latency (${initialLoadLatencyMs}ms) hurts search rankings.`);
+      }
 
       if (identifiedBottlenecks.length === 0 && findings.length > 0) {
         identifiedBottlenecks.push(findings[0].evidence);
@@ -100,31 +135,39 @@ export class DossierSynthesizer {
     }
 
     let coreAngle = "";
-    let suggestedScope = "";
-    let estimatedValueRange = "";
-
     if (opportunityType === "DISCONNECTED_GBP_WEBSITE") {
       const domainDisplay = params.unlinkedWebsiteUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "official domain";
-      coreAngle = `Reconnecting your active website (${domainDisplay}) to your Google Maps profile to recover lost local search traffic.`;
-      suggestedScope = `Google Business Profile synchronization, Local Business Schema markup integration, mobile conversion review, and Maps 3-pack ranking recovery.`;
-      estimatedValueRange = "$1,500 – $3,500 (or ₹25,000 – ₹50,000)";
+      coreAngle = `Reconnecting your active website (${domainDisplay}) to your Google Maps profile to capture patients and recover local 3-pack search ranking.`;
     } else if (opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE") {
       coreAngle = `Automating client scheduling, WhatsApp intake, and internal service management for ${params.name}.`;
-      suggestedScope = `Custom automated intake portal, 24/7 calendar booking sync, multi-staff calendar management, and SMS/WhatsApp appointment reminders.`;
-      estimatedValueRange = "$6,500 – $14,000 (Target Scope Benchmark)";
     } else if (opportunityType === "WEBSITE_AUTOMATION") {
-      coreAngle = `Upgrading ${params.name}'s mobile conversion speed and adding instant interactive booking.`;
-      suggestedScope = `Mobile-first speed optimization (<1.5s LCP), direct click-to-call conversion bar, and embedded scheduling widget.`;
-      estimatedValueRange = "$3,500 – $7,500 (Target Scope Benchmark)";
+      coreAngle = `Upgrading ${params.name}'s mobile speed, fixing desktop pinch-to-zoom layout, and adding 1-tap WhatsApp consultation booking.`;
     } else {
-      coreAngle = `Launching a high-converting digital storefront for ${params.name} to capture Google Maps traffic.`;
-      suggestedScope = `Complete responsive website build, Google Maps schema integration, mobile call-to-action anchors, and lead capture form.`;
-      estimatedValueRange = "$2,500 – $5,000 (Target Scope Benchmark)";
+      coreAngle = `Launching a high-converting mobile digital storefront for ${params.name} to capture Google Maps traffic and direct WhatsApp leads.`;
     }
 
-    let executiveSummary = `${params.name} is a high-reputation ${params.category || "local business"} (${params.rating}★, ${params.reviewCount} reviews) with high customer trust but a substantial ${opportunityType.replace(/_/g, " ")} gap. Resolving these bottlenecks directly increases captured mobile bookings.`;
+    // Dynamic suggested scope from CommercialProfile
+    const suggestedScope = commercialProfile.downscopedScopeDescription || (
+      opportunityType === "DISCONNECTED_GBP_WEBSITE"
+        ? "1. Google Business Profile Synchronization: Reconnect verified website to Maps. 2. Local Schema Integration: Embed LocalBusiness JSON-LD markup. 3. 1-Tap WhatsApp Conversion: Connect mobile consultation trigger."
+        : opportunityType === "WEBSITE_AUTOMATION"
+        ? "1. Mobile Viewport & Touch Layout Re-engineering. 2. 24/7 WhatsApp & Online Booking Funnel. 3. SSL Hardening & Speed Acceleration (<1.5s)."
+        : opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE"
+        ? "1. Multi-Staff Calendar & WhatsApp Intake Engine. 2. Automated Patient Reminders & Service Records Portal. 3. Mobile Staff Dashboard."
+        : "1. Mobile-First Storefront Architecture. 2. Doctor/Service Menus & Reviews Embed. 3. 1-Tap WhatsApp Consultation Bar & Google Maps Schema."
+    );
 
-    // 3. Optional OpenAI LLM Enhancement (if OPENAI_API_KEY is configured)
+    // Format Structured Value Range from CommercialProfile
+    const buildOffer = commercialProfile.recommendedBuildOffer;
+    const careOffer = commercialProfile.recommendedMonthlyCare;
+    const isINR = buildOffer.currency === "INR";
+    const curSym = isINR ? "₹" : "$";
+    
+    const estimatedValueRange = `${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")} – ${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} Build + ${curSym}${careOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${careOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")}/mo (${commercialProfile.feasibleOfferWindow.status === "DOWN_SCOPED" ? "Lean MVP" : "Market Fit"})`;
+
+    let executiveSummary = `${params.name} is an established ${params.category || "local business"} (${params.rating}★, ${params.reviewCount} reviews) with ${commercialProfile.businessScale} business scale. Commercial assessment recommends a ${commercialProfile.pursuitAssessment.decision} approach with ${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} build package.`;
+
+    // 4. Optional OpenAI LLM Enhancement (Strictly Narrative Synthesis, NO price invention)
     if (apiKey && apiKey.trim().length > 0) {
       try {
         const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -140,18 +183,21 @@ export class DossierSynthesizer {
               {
                 role: "system",
                 content:
-                  "You are an elite B2B sales strategist for digital agencies. Generate concise, punchy executive pitch copy for a local business lead.",
+                  "You are an elite B2B sales strategist for digital agencies. Generate concise, punchy executive pitch copy for a local business lead based on the provided commercial profile and audit facts. DO NOT invent or modify price numbers.",
               },
               {
                 role: "user",
                 content: `Business: ${params.name}
 Category: ${params.category}
 Rating: ${params.rating}★ (${params.reviewCount} reviews)
-Has Website: ${params.hasWebsite}
-Opportunity Tier: ${opportunityType}
+Business Scale: ${commercialProfile.businessScale}
+Commercial Ceiling: ${curSym}${commercialProfile.clientCommercialCeiling.max}
+Feasible Window: ${commercialProfile.feasibleOfferWindow.status}
+Recommended Build: ${curSym}${buildOffer.min} – ${curSym}${buildOffer.max}
+Monthly Care: ${curSym}${careOffer.min} – ${curSym}${careOffer.max}/mo
 Audit Bottlenecks: ${identifiedBottlenecks.join("; ")}
 
-Output a 2-sentence executive summary highlighting their exact commercial bottleneck and how fixing it unlocks revenue.`,
+Output a 2-sentence executive summary highlighting their exact commercial bottleneck and how fixing it unlocks revenue within their realistic budget.`,
               },
             ],
             temperature: 0.3,
@@ -178,8 +224,11 @@ Output a 2-sentence executive summary highlighting their exact commercial bottle
       confidenceScore: scores.confidenceScore,
       overallLeadScore: scores.overallLeadScore,
       opportunityType,
+      hasWebsite: params.hasWebsite,
+      hasGbpWebsiteLink: !params.isGbpDisconnected && params.hasWebsite,
       isGbpDisconnected: params.isGbpDisconnected,
       unlinkedWebsiteUrl: params.unlinkedWebsiteUrl,
+      websiteUrl: params.websiteUrl,
       identifiedStrengths,
       identifiedBottlenecks,
       provenance,
@@ -190,6 +239,7 @@ Output a 2-sentence executive summary highlighting their exact commercial bottle
         estimatedValueRange,
       },
       executiveSummary,
+      commercialProfile,
     };
   }
 }

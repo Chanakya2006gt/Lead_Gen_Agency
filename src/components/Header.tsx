@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Download, Layers } from "lucide-react";
+import { Download, Terminal, Activity } from "lucide-react";
 
 interface HeaderProps {
   totalScans: number;
@@ -24,43 +24,44 @@ export function Header({
   };
 
   return (
-    <header className="sticky top-0 z-40 px-6 py-3.5 bg-[#0A0C10] border-b border-white/[0.08]">
+    <header className="sticky top-0 z-40 px-6 py-3 bg-[#0A0E17]/80 backdrop-blur-xl border-b border-white/[0.1] shadow-lg shadow-black/20">
       <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        {/* Brand & Purpose */}
+        {/* Brand & Terminal Identity */}
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-            <Layers className="w-4 h-4" />
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <Terminal className="w-4 h-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold tracking-tight text-white">
+              <h1 className="text-sm font-bold tracking-tight text-white font-sans">
                 LEAD ENGINE
               </h1>
-              <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-white/[0.06] text-slate-300 border border-white/[0.06]">
-                Client Prospecting
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-white/[0.04] text-slate-300 border border-white/[0.06]">
+                v2.4
               </span>
             </div>
             <p className="text-[11px] text-slate-400">
-              Verified local business discovery &amp; conversion audit system
+              Opportunity discovery &amp; technical evidence workstation
             </p>
           </div>
         </div>
 
         {/* Live Metrics Summary & Export */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3 text-xs text-slate-400 font-medium">
+        <div className="flex items-center gap-3.5">
+          <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
             <span>
-              <strong className="text-slate-200">{totalScans}</strong> Scans
+              <strong className="text-slate-100 font-bold">{totalScans}</strong> Scans
             </span>
             <span className="text-slate-600">·</span>
             <span>
-              <strong className="text-slate-200">{totalQualified}</strong> Leads
+              <strong className="text-slate-100 font-bold">{totalQualified}</strong> Leads
             </span>
             {highPriorityCount > 0 && (
               <>
                 <span className="text-slate-600">·</span>
                 <span className="text-amber-400 font-semibold flex items-center gap-1">
-                  <span>{highPriorityCount} High Priority</span>
+                  <Activity className="w-3 h-3 animate-pulse" />
+                  <span>{highPriorityCount} Opportunities</span>
                 </span>
               </>
             )}

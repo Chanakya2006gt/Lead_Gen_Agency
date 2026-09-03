@@ -1,0 +1,21 @@
+{
+  "name": "Roast & Toast Artisan Cafe",
+  "category": "Cafe and Bakery",
+  "rating": 4.8,
+  "reviewCount": 1250,
+  "formattedAddress": "Jubilee Hills, Hyderabad, Telangana",
+  "hasWebsite": true,
+  "websiteUrl": "https://roastandtoastcafe.com",
+  "auditTelemetry": {
+    "viewportMetaPresent": false,
+    "hasHorizontalOverflow": true,
+    "hasSsl": true,
+    "brokenLinksCount": 0,
+    "jsConsoleErrorsCount": 0,
+    "initialLoadLatencyMs": 450,
+    "hasDirectClickToCall": false,
+    "hasWhatsAppDirectLink": false,
+    "hasInteractiveBookingForm": false,
+    "findings": []
+  }
+}

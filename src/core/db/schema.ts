@@ -1,4 +1,7 @@
 import { sqliteTable, text as sqliteText, integer as sqliteInteger, real as sqliteReal } from "drizzle-orm/sqlite-core";
+import { CommercialProfile } from "@/features/commercial/types";
+
+export * from "@/features/commercial/types";
 
 export type ReviewTrend = "GROWING" | "STABLE" | "DECLINING" | "STALE" | "UNKNOWN";
 export type OpportunityType = "WEBSITE" | "WEBSITE_AUTOMATION" | "CUSTOM_OPERATIONAL_SOFTWARE" | "DISCONNECTED_GBP_WEBSITE" | "UNKNOWN";
@@ -55,6 +58,7 @@ export interface BusinessDossier {
     estimatedValueRange: string;
   };
   executiveSummary: string;
+  commercialProfile?: CommercialProfile;
 }
 
 // =========================================================================
@@ -105,11 +109,13 @@ export const leads = sqliteTable("leads", {
   auditStatus: sqliteText("audit_status").notNull().default("PENDING"),
   auditTelemetry: sqliteText("audit_telemetry", { mode: "json" }).$type<AuditTelemetry>(),
   
-  // 4D Scoring & Synthesis
+  // 4D & Commercial Scoring & Synthesis
   reputationScore: sqliteInteger("reputation_score").default(0),
   digitalGapScore: sqliteInteger("digital_gap_score").default(0),
   opportunityScore: sqliteInteger("opportunity_score").default(0),
   confidenceScore: sqliteInteger("confidence_score").default(0),
+  commercialFitScore: sqliteInteger("commercial_fit_score").default(0),
+  leadAttractivenessScore: sqliteInteger("lead_attractiveness_score").default(0),
   totalLeadScore: sqliteInteger("total_lead_score").default(0),
   opportunityType: sqliteText("opportunity_type").$type<OpportunityType>().notNull().default("UNKNOWN"),
   dossier: sqliteText("dossier", { mode: "json" }).$type<BusinessDossier>(),

@@ -8,6 +8,8 @@
  * Locality, Domain Slug) with discrete HIGH | MEDIUM | LOW confidence tiers.
  */
 
+import { PlaywrightAuditEngine } from "@/features/auditor/PlaywrightAuditEngine";
+
 export interface BusinessEntityQuery {
   name: string;
   formattedAddress?: string | null;
@@ -227,6 +229,9 @@ export class SecondaryDomainResolver {
     }
 
     try {
+      const allowLocalhost = process.env.NODE_ENV === "test" || process.env.PLAYWRIGHT_TEST === "1";
+      await PlaywrightAuditEngine.validateUrlSecurity(originUrl, allowLocalhost);
+
       const res = await fetch(originUrl, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadEngineAudit/1.0)" },
         signal: AbortSignal.timeout(3500),
@@ -371,14 +376,21 @@ export class SecondaryDomainResolver {
     // Step 1: Check if new candidate URL is a 301/308 redirect from existing URL
     if (existingVerifiedUrl) {
       try {
+        const allowLocalhost = process.env.NODE_ENV === "test" || process.env.PLAYWRIGHT_TEST === "1";
+        await PlaywrightAuditEngine.validateUrlSecurity(existingVerifiedUrl, allowLocalhost);
+
         const redirectCheck = await fetch(existingVerifiedUrl, {
           method: "HEAD",
           redirect: "follow",
           headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadEngineMigration/1.0)" },
           signal: AbortSignal.timeout(3000),
         });
-        if (redirectCheck.ok && new URL(redirectCheck.url).origin === new URL(newCandidateUrl).origin) {
-          return true; // Legitimate verified domain redirect
+        if (redirectCheck.ok) {
+          const finalOrigin = new URL(redirectCheck.url).origin;
+          await PlaywrightAuditEngine.validateUrlSecurity(finalOrigin, allowLocalhost);
+          if (finalOrigin === new URL(newCandidateUrl).origin) {
+            return true; // Legitimate verified domain redirect
+          }
         }
       } catch {}
     }

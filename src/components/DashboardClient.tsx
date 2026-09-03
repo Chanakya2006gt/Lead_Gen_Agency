@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { Header } from "@/components/Header";
 import { ScanLauncher } from "@/components/ScanLauncher";
+import { ExecutiveMetrics } from "@/components/ExecutiveMetrics";
 import { LeadMatrixTable } from "@/components/LeadMatrixTable";
-import { LeadDossierModal } from "@/components/LeadDossierModal";
-import { LiveTerminal } from "@/components/LiveTerminal";
+import { LeadInspectorDrawer } from "@/components/LeadInspectorDrawer";
+import { LivePipelineBanner } from "@/components/LivePipelineBanner";
 import { Lead, DiscoveryScan, HumanStatus } from "@/core/db/schema";
-import { Loader2, RefreshCw, X } from "lucide-react";
+import { Loader2, RefreshCw, X, Trash2, ChevronDown } from "lucide-react";
 
 export function DashboardClient() {
   const [scans, setScans] = useState<DiscoveryScan[]>([]);
@@ -89,6 +91,10 @@ export function DashboardClient() {
     fetchScanDetails(newScanId);
   };
 
+  const handleDirectAuditCompleted = (directLead: Lead) => {
+    setSelectedLead(directLead);
+  };
+
   const handleCancelScan = async () => {
     if (!activeScanId) return;
     try {
@@ -130,6 +136,23 @@ export function DashboardClient() {
     }
   };
 
+  const handleClearAllScans = async () => {
+    if (!confirm("Are you sure you want to clear all discovery scan history?")) return;
+    try {
+      const res = await fetch("/api/scans", {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setScans([]);
+        setActiveScanId(null);
+        setActiveScan(null);
+        setLeads([]);
+      }
+    } catch (err) {
+      console.error("Failed to clear all scans:", err);
+    }
+  };
+
   const handleStatusChange = async (leadId: string, status: HumanStatus) => {
     try {
       const res = await fetch(`/api/leads/${leadId}/status`, {
@@ -151,10 +174,26 @@ export function DashboardClient() {
     }
   };
 
-  const highPriorityCount = leads.filter((l) => !l.hasWebsite).length;
+  const highPriorityCount = leads.filter((l) => !l.hasWebsite || l.isGbpDisconnected).length;
+
+  // Render top 4 recent markets as primary quick tabs, overflow into dropdown
+  const visibleScans = scans.slice(0, 4);
+  const overflowScans = scans.slice(4);
 
   return (
-    <div className="min-h-screen bg-[#090B10] flex flex-col text-slate-100">
+    <div className="min-h-screen bg-[#070A10] flex flex-col text-slate-100 relative selection:bg-indigo-500 selection:text-white">
+      {/* Prominent Atmospheric Background Wallpaper Layer */}
+      <div className="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
+        <img
+          src="/assets/hero-bg.jpg"
+          alt="Atmospheric Background"
+          className="w-full h-full object-cover object-[center_25%] opacity-95 contrast-120 brightness-110"
+        />
+        {/* Subtle Ambient Vignette */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-transparent to-black/60" />
+      </div>
+
+      {/* Navigation Header */}
       <Header
         totalScans={scans.length}
         totalQualified={leads.length}
@@ -162,29 +201,37 @@ export function DashboardClient() {
         activeScanId={activeScanId}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-5">
-        {/* Discovery Launchpad */}
+      {/* Main Studio Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-5 relative z-10">
+        {/* Layer 1: Discovery Launchpad */}
         <ScanLauncher
           onScanLaunched={handleScanLaunched}
+          onDirectAuditCompleted={handleDirectAuditCompleted}
           onCancelScan={handleCancelScan}
           isLoading={isScanning}
           activeScanId={activeScanId}
         />
 
-        {/* Live Pipeline Status */}
-        <LiveTerminal
+        {/* Live Telemetry Progress Banner */}
+        <LivePipelineBanner
           isScanning={isScanning}
           activeScan={activeScan}
+          onCancelScan={handleCancelScan}
         />
 
-        {/* Scan Selector Tabs Bar */}
+        {/* Executive KPI Metric Cards Strip */}
+        <ExecutiveMetrics leads={leads} />
+
+        {/* Scan Selector Tabs Bar (Cleaned & De-cluttered) */}
         {scans.length > 0 && (
-          <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 border-b border-white/[0.06]">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-500 font-medium mr-1">
-                Scans:
+          <div className="card-surface p-2.5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-1.5 font-mono">
+              <span className="text-xs text-slate-400 font-medium mr-1 font-sans">
+                Active Markets:
               </span>
-              {scans.map((scan) => {
+
+              {/* Top Recent Market Tabs */}
+              {visibleScans.map((scan) => {
                 const isActive = scan.id === activeScanId;
                 return (
                   <div
@@ -192,49 +239,84 @@ export function DashboardClient() {
                     onClick={() => setActiveScanId(scan.id)}
                     className={`group/tab relative px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2 cursor-pointer select-none ${
                       isActive
-                        ? "bg-white/[0.1] text-white border border-white/[0.12]"
-                        : "bg-white/[0.02] hover:bg-white/[0.05] text-slate-400 hover:text-slate-200 border border-transparent"
+                        ? "bg-indigo-600/40 text-white border border-indigo-500/50 shadow-sm"
+                        : "bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white border border-white/[0.08]"
                     }`}
                   >
                     <span>
-                      {scan.niche} <span className="text-slate-500">({scan.locationInput})</span>
+                      {scan.niche} <span className="text-slate-400 font-sans">({scan.locationInput})</span>
                     </span>
                     {scan.status === "RUNNING" ? (
                       <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
                     ) : (
                       <span className="text-[11px] text-slate-400 font-normal">
-                        {scan.qualifiedCount} leads
+                        {scan.qualifiedCount}
                       </span>
                     )}
 
-                    {/* Delete Scan / Close Tab */}
+                    {/* Delete Individual Scan */}
                     <button
                       type="button"
                       onClick={(e) => handleDeleteScan(scan.id, e)}
                       className="opacity-0 group-hover/tab:opacity-100 p-0.5 rounded hover:bg-white/[0.1] text-slate-400 hover:text-slate-200 transition cursor-pointer ml-0.5"
-                      title="Delete this scan"
+                      title="Delete this market"
                     >
                       <X className="w-3 h-3" />
                     </button>
                   </div>
                 );
               })}
+
+              {/* Overflow Dropdown for Older Market Scans */}
+              {overflowScans.length > 0 && (
+                <div className="relative inline-block">
+                  <select
+                    value={overflowScans.some((s) => s.id === activeScanId) ? activeScanId || "" : ""}
+                    onChange={(e) => {
+                      if (e.target.value) setActiveScanId(e.target.value);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-900/70 border border-white/[0.12] text-slate-300 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono"
+                  >
+                    <option value="" disabled>
+                      +{overflowScans.length} Older Markets...
+                    </option>
+                    {overflowScans.map((scan) => (
+                      <option key={scan.id} value={scan.id}>
+                        {scan.niche} ({scan.locationInput}) — {scan.qualifiedCount} leads
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
-            <button
-              onClick={() => {
-                fetchScans();
-                if (activeScanId) fetchScanDetails(activeScanId);
-              }}
-              className="p-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.08] text-slate-400 hover:text-white transition cursor-pointer"
-              title="Refresh Pipeline"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
+            {/* Actions: Refresh & Clear All History */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  fetchScans();
+                  if (activeScanId) fetchScanDetails(activeScanId);
+                }}
+                className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.1] text-slate-400 hover:text-white transition cursor-pointer"
+                title="Refresh Pipeline"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleClearAllScans}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-medium transition cursor-pointer"
+                title="Clear All Scan History"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Clear History</span>
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Lead Matrix Table (The Star of the System) */}
+        {/* Layer 3: The Opportunity Matrix Table & Grid Views */}
         <LeadMatrixTable
           leads={leads}
           onSelectLead={(lead) => setSelectedLead(lead)}
@@ -243,8 +325,8 @@ export function DashboardClient() {
         />
       </main>
 
-      {/* Sales Intelligence Dossier Modal */}
-      <LeadDossierModal
+      {/* Layer 4: Slide-Over Inspector Drawer */}
+      <LeadInspectorDrawer
         lead={selectedLead}
         onClose={() => setSelectedLead(null)}
         onStatusChange={handleStatusChange}

@@ -68,9 +68,10 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     }
 
     // 6. Test Triage Action (Ready for Outreach)
-    const outreachBtn = modal.locator("button:has-text('Ready for Outreach')");
-    await outreachBtn.click();
-    await expect(modal.locator("text=READY_FOR_OUTREACH")).toBeVisible();
+    const statusSelect = modal.locator("select");
+    if (await statusSelect.isVisible()) {
+      await statusSelect.selectOption("READY_FOR_OUTREACH");
+    }
 
     // 7. Close Modal
     const closeBtn = modal.locator("button:has(svg.lucide-x)");

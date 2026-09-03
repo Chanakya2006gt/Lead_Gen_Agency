@@ -63,3 +63,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Failed to initialize discovery scan" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  const authError = verifyApiAccess(request);
+  if (authError) return authError;
+
+  try {
+    db.transaction((tx) => {
+      tx.delete(leads).run();
+      tx.delete(discoveryScans).run();
+    });
+
+    return NextResponse.json({ success: true, message: "All scan history cleared" });
+  } catch (err: any) {
+    console.error("DELETE /api/scans error:", err);
+    return NextResponse.json({ error: "Failed to clear scan history" }, { status: 500 });
+  }
+}

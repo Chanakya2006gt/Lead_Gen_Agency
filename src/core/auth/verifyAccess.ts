@@ -1,14 +1,17 @@
 import { NextResponse } from "next/server";
+import crypto from "crypto";
 
 /**
  * Validates request authorization using LEAD_ENGINE_API_SECRET or session token.
- * If LEAD_ENGINE_API_SECRET is not configured in local development, access is granted to localhost.
+ * Uses constant-time cryptographic hash comparison (crypto.timingSafeEqual)
+ * to eliminate side-channel timing attack vulnerabilities.
+ * If LEAD_ENGINE_API_SECRET is not configured in local development, access is granted.
  */
 export function verifyApiAccess(request: Request): NextResponse | null {
   const configuredSecret = process.env.LEAD_ENGINE_API_SECRET;
 
   // If no secret is configured, allow requests in local development
-  if (!configuredSecret) {
+  if (!configuredSecret || configuredSecret.trim().length === 0) {
     return null;
   }
 
@@ -27,9 +30,15 @@ export function verifyApiAccess(request: Request): NextResponse | null {
   );
   const cookieToken = cookies["lead_engine_token"];
 
-  const providedToken = headerSecret || bearerToken || cookieToken;
+  const providedToken = headerSecret || bearerToken || cookieToken || "";
 
-  if (providedToken !== configuredSecret) {
+  // Timing-safe cryptographic comparison using SHA-256 digest buffers
+  const configuredHash = crypto.createHash("sha256").update(configuredSecret).digest();
+  const providedHash = crypto.createHash("sha256").update(providedToken).digest();
+
+  const isAuthorized = crypto.timingSafeEqual(configuredHash, providedHash);
+
+  if (!isAuthorized) {
     return NextResponse.json(
       { error: "Unauthorized. Valid API secret or session token is required." },
       { status: 401 }
