@@ -49,27 +49,37 @@ export async function GET(request: Request) {
       "Estimated Deal Value",
     ];
 
+    const sanitizeCell = (val: any): string => {
+      if (val === null || val === undefined) return '""';
+      let str = String(val);
+      // CSV Formula Injection Prevention: prefix dangerous formula trigger characters with single quote
+      if (/^[=+\-@\t\r]/.test(str)) {
+        str = "'" + str;
+      }
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
     const rows = allLeads.map((l: Lead) => {
       const dossier = (l.dossier as any) || {};
       const pitch = dossier.recommendedPitch || {};
 
       return [
         l.totalLeadScore ?? 0,
-        `"${(l.name || "").replace(/"/g, '""')}"`,
-        `"${(l.category || "").replace(/"/g, '""')}"`,
-        l.opportunityType,
+        sanitizeCell(l.name),
+        sanitizeCell(l.category),
+        sanitizeCell(l.opportunityType),
         l.rating !== null ? l.rating : "UNVERIFIED",
         l.reviewCount !== null ? l.reviewCount : "UNVERIFIED",
         l.reviewsLast30Days !== null ? l.reviewsLast30Days : "N/A",
         l.reviewsLast90Days !== null ? l.reviewsLast90Days : "N/A",
-        l.reviewTrend,
+        sanitizeCell(l.reviewTrend),
         l.hasWebsite ? "YES" : "NO",
-        `"${(l.websiteUrl || "").replace(/"/g, '""')}"`,
-        `"${(l.phone || "").replace(/"/g, '""')}"`,
-        `"${(l.formattedAddress || "").replace(/"/g, '""')}"`,
-        l.humanStatus,
-        `"${(pitch.coreAngle || "").replace(/"/g, '""')}"`,
-        `"${(pitch.estimatedValueRange || "").replace(/"/g, '""')}"`,
+        sanitizeCell(l.websiteUrl),
+        sanitizeCell(l.phone),
+        sanitizeCell(l.formattedAddress),
+        sanitizeCell(l.humanStatus),
+        sanitizeCell(pitch.coreAngle),
+        sanitizeCell(pitch.estimatedValueRange),
       ].join(",");
     });
 

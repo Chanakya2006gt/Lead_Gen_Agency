@@ -19,8 +19,6 @@ export function LivePipelineBanner({
 
   const status = activeScan?.status || (isScanning ? "RUNNING" : "COMPLETED");
   const isRunning = status === "RUNNING";
-  const logs = ((activeScan as any)?.logs as any[]) || [];
-  const latestLog = logs.length > 0 ? logs[logs.length - 1] : null;
 
   return (
     <div className="card-surface p-4 border border-indigo-500/20 bg-gradient-to-r from-indigo-950/20 via-[#0D111A] to-[#0D111A] animate-in fade-in duration-200">
@@ -52,15 +50,9 @@ export function LivePipelineBanner({
             </div>
 
             <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-              {latestLog ? (
-                <span className="text-slate-300">
-                  [{latestLog.stage}] {latestLog.message}
-                </span>
-              ) : (
-                <span>
-                  Scanning {activeScan?.niche || "local market"} in {activeScan?.locationInput || "area"}
-                </span>
-              )}
+              <span>
+                Auditing {activeScan?.niche || "local market"} entities in {activeScan?.locationInput || "selected location"}
+              </span>
             </p>
           </div>
         </div>

@@ -33,15 +33,18 @@ export class LiveGoogleMapsAdapter implements IDiscoveryAdapter {
     let browser: Browser | null = null;
 
     try {
+      const launchArgs = [
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-blink-features=AutomationControlled",
+      ];
+      if (process.env.PLAYWRIGHT_NO_SANDBOX === "1") {
+        launchArgs.push("--no-sandbox");
+      }
+
       browser = await chromium.launch({
         headless: this.isHeadless,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-blink-features=AutomationControlled",
-          "--disable-web-security",
-        ],
+        args: launchArgs,
       });
 
       const context = await browser.newContext({

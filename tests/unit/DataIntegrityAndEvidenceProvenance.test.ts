@@ -10,9 +10,26 @@ import { leads } from "@/core/db/schema";
 import { eq } from "drizzle-orm";
 import crypto from "crypto";
 
+import { PlaywrightAuditEngine } from "@/features/auditor/PlaywrightAuditEngine";
+import { vi } from "vitest";
+
 describe("12-Invariant Data Integrity & Evidence Provenance Adversarial Suite", () => {
   // TEST 1 — Direct URL without Google data
   it("Invariant 1: Direct URL Teardown outputs strictly null Google rating and review count", async () => {
+    vi.spyOn(DirectAuditService as any, "validateUrlSecurity").mockResolvedValue("https://example.com");
+    vi.spyOn(PlaywrightAuditEngine.prototype, "auditUrl").mockResolvedValue({
+      viewportMetaPresent: true,
+      hasHorizontalOverflow: false,
+      hasSsl: true,
+      brokenLinksCount: 0,
+      jsConsoleErrorsCount: 0,
+      initialLoadLatencyMs: 450,
+      hasDirectClickToCall: true,
+      hasWhatsAppDirectLink: false,
+      hasInteractiveBookingForm: false,
+      findings: [],
+    });
+
     // Audit a valid web domain in ephemeral mode
     const res = await DirectAuditService.executeDirectTeardown({
       url: "https://example.com",

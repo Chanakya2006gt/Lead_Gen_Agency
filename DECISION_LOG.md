@@ -106,3 +106,39 @@ $$\text{Observation} \rightarrow \text{Business Context} \rightarrow \text{Relev
    - 7 test scenarios verifying TRELIO, industrial manufacturers, unknown entities, and high-volume clinics.
    - 110 total Vitest tests passing cleanly.
 
+---
+
+## 5. Architectural Decision Log: Single-Operator Workstation Lockdown & Threat Defense (AD-036)
+
+### Context & Mission
+Re-aligned `Lead_Gen_Agency` as a high-security, **local-first, single-operator acquisition workstation**. Removed claims of multi-tenant cloud/Vercel/Supabase production runtime in favor of robust, local SQLite storage (`lead_engine.db`) and fail-closed cryptographic session security.
+
+### Threat Model Defenses Implemented
+1. **Fail-Closed API Authentication Guard (`verifyAccess.ts`)**:
+   - All mutating and querying API routes (`/api/scans`, `/api/audit/direct`, `/api/leads/export`, `/api/discovery/suggestions`) enforce strict session verification.
+   - Constant-time cryptographic comparison (`crypto.timingSafeEqual`) on SHA-256 digests against `LEAD_ENGINE_API_SECRET`.
+   - Fails closed with `401 Unauthorized` in production or strict dev when unauthenticated.
+   - Supports `x-engine-secret`, `Authorization: Bearer <secret>`, and `lead_engine_token` httpOnly session cookies.
+2. **Session Cookie Management & Workstation Lock Screen**:
+   - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/status`.
+   - Seamless workstation lock screen rendered on 401 unauthenticated states.
+3. **Scoped Bulk Delete Protection (`DELETE /api/scans`)**:
+   - Requires explicit confirmation payload `{ confirm: "DESTROY_ALL" }` to prevent accidental history wiping.
+4. **Export CSV Sanitization (`/api/leads/export`)**:
+   - Defends against Formula Injection (CWE-1236) by escaping fields beginning with `= + - @ \t \r`.
+5. **Places API Default & Guarded Maps Scraping**:
+   - `ScanPipelineService` defaults strictly to `google_places`. Unsafe browser scraping requires explicit opt-in via `ALLOW_UNSAFE_MAPS_SCRAPE=true`.
+6. **Playwright SSRF Post-Navigation Redirection Defense**:
+   - Validates target domain and destination URLs after `page.goto` to eliminate open redirect bypasses to RFC 1918 or cloud metadata IP endpoints (`169.254.169.254`).
+7. **Database Boot Isolation & Stale Cleanup**:
+   - SQLite initialized in WAL mode. Intercepts `postgres://` URLs with warnings and redirects cleanly to local SQLite storage on disk.
+   - Automatically resets orphaned `RUNNING` scans on system boot.
+8. **Documentation Truth Alignment & Licensing**:
+   - Added `LICENSE` (MIT) and `docs/RUNTIME.md`.
+   - Updated `README.md`, `SECURITY.md`, and `ARCHITECTURE.md`.
+
+### Verification & Test Results
+- `npm run lint` — Clean pass (0 TypeScript errors).
+- `npm run test` — 26 test files passed, 119 tests passed (100% green).
+- `npm run test:e2e` — 3 Playwright browser e2e tests passed cleanly (Lock screen, live audit, CSV export).
+- `npm run build` — Clean production build with optimized static and dynamic bundles.

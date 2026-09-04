@@ -101,23 +101,53 @@ export class ScanPipelineService {
       mode: options.mode || "COMMERCIAL",
     });
 
-    // 2. Select Discovery Adapter
+    // 2. Select Discovery Adapter (Fail-closed & Strict Provenance)
     let adapter: IDiscoveryAdapter;
-    if (options.source === "google_places") {
-      adapter = new GooglePlacesApiAdapter();
-    } else if (options.source === "serpapi") {
-      adapter = new SerpApiGoogleMapsAdapter();
-    } else if (options.source === "apify") {
-      adapter = new ApifyMapsAdapter();
-    } else if (options.source === "outscraper") {
-      adapter = new OutscraperAdapter();
-    } else if (options.source === "mock" && (process.env.NODE_ENV === "test" || process.env.PLAYWRIGHT_TEST === "1")) {
+    const source = options.source || "google_places";
+
+    if (source === "mock" && (process.env.NODE_ENV === "test" || process.env.PLAYWRIGHT_TEST === "1")) {
       adapter = new MockDiscoveryAdapter();
+    } else if (source === "google_places") {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
+      if (!apiKey || apiKey.trim().length === 0) {
+        db.update(discoveryScans)
+          .set({ status: "FAILED" })
+          .where(eq(discoveryScans.id, scanId))
+          .run();
+        throw new Error(
+          "Set GOOGLE_MAPS_API_KEY (or GOOGLE_PLACES_API_KEY) in your environment to use Google Places discovery."
+        );
+      }
+      adapter = new GooglePlacesApiAdapter();
+    } else if (source === "live_google_maps") {
+      if (process.env.ALLOW_UNSAFE_MAPS_SCRAPE !== "true") {
+        db.update(discoveryScans)
+          .set({ status: "FAILED" })
+          .where(eq(discoveryScans.id, scanId))
+          .run();
+        throw new Error(
+          "Live Google Maps scraping is disabled by default. Set ALLOW_UNSAFE_MAPS_SCRAPE=true in your environment to enable."
+        );
+      }
+      adapter = new LiveGoogleMapsAdapter();
+    } else if (source === "serpapi") {
+      adapter = new SerpApiGoogleMapsAdapter();
+    } else if (source === "apify") {
+      adapter = new ApifyMapsAdapter();
+    } else if (source === "outscraper") {
+      adapter = new OutscraperAdapter();
     } else {
-      if (process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY) {
+      const apiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_PLACES_API_KEY;
+      if (apiKey && apiKey.trim().length > 0) {
         adapter = new GooglePlacesApiAdapter();
       } else {
-        adapter = new LiveGoogleMapsAdapter();
+        db.update(discoveryScans)
+          .set({ status: "FAILED" })
+          .where(eq(discoveryScans.id, scanId))
+          .run();
+        throw new Error(
+          "Set GOOGLE_MAPS_API_KEY (or GOOGLE_PLACES_API_KEY) in your environment to use Google Places discovery."
+        );
       }
     }
 

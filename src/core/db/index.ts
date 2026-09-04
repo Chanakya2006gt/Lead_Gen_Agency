@@ -17,8 +17,9 @@ if (dbPath.startsWith("sqlite:")) {
   dbPath = dbPath.replace("sqlite:", "");
 }
 
-// Intercept Postgres URLs in local dev if not testing
+// Intercept Postgres URLs: Fail explicit / fallback to local SQLite workstation
 if (dbPath.startsWith("postgres://") || dbPath.startsWith("postgresql://")) {
+  console.warn("\x1b[33m[Workstation Runtime Warning]\x1b[0m Postgres runtime is not implemented; falling back to local SQLite at ./lead_engine.db. (Set DATABASE_URL=./lead_engine.db in your environment).");
   dbPath = process.env.NODE_ENV === "test" ? "./lead_engine_test.db" : "./lead_engine.db";
 }
 
@@ -241,6 +242,11 @@ try {
   }
   if (!existingColumns.has("disposition")) {
     sqlite.exec("ALTER TABLE leads ADD COLUMN disposition TEXT DEFAULT 'PURSUE';");
+  }
+
+  // Phase 5.2: Fail stale running scans on process boot (AbortControllers do not survive reboot)
+  if (process.env.NODE_ENV !== "test") {
+    sqlite.exec("UPDATE discovery_scans SET status = 'FAILED' WHERE status = 'RUNNING';");
   }
 } catch (migErr) {
   // Silent fallback

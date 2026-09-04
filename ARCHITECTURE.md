@@ -1,4 +1,4 @@
-# ARCHITECTURE: Lead Engine (V1)
+# ARCHITECTURE: Lead Engine (Workstation Model)
 ### Modular Feature-Driven (DDD) Subsystem Specifications
 
 ---
@@ -9,52 +9,69 @@
 src/
 ├── 🌐 app/                          # Next.js App Router (HTTP Controllers & Routing)
 │   ├── api/
-│   │   ├── scans/route.ts           # POST (dispatch pipeline), GET (list scans)
-│   │   ├── scans/[id]/route.ts      # GET (scan status & ranked leads)
+│   │   ├── auth/                    # login, logout, status (httpOnly session management)
+│   │   ├── scans/route.ts           # POST (dispatch pipeline), GET (list scans), DELETE (scoped wipe)
+│   │   ├── scans/[id]/route.ts      # GET (scan status & ranked leads), DELETE (individual scan)
+│   │   ├── scans/[id]/cancel/       # POST (abort active execution)
+│   │   ├── discovery/suggestions/   # GET (location-adaptive market presets)
+│   │   ├── places/autocomplete/     # GET (Google Places autocomplete)
 │   │   ├── leads/[id]/status/       # PATCH (triage state transition)
-│   │   └── leads/export/route.ts    # GET (CSV stream export)
-│   ├── globals.css                  # Dark obsidian theme & animations
-│   ├── layout.tsx                   # Root HTML & security header injection
-│   └── page.tsx                     # Dynamic Server Component entrypoint
+│   │   ├── leads/export/route.ts    # GET (sanitized CSV stream export)
+│   │   └── audit/direct/route.ts    # POST (instant single URL teardown)
+│   ├── globals.css                  # Dark obsidian HUD theme & translucent glass styles
+│   ├── layout.tsx                   # Root layout & security header injection
+│   └── page.tsx                     # React Server Component entrypoint
 │
 ├── 🧠 features/                     # Core Business Domain Modules
-│   ├── discovery/                   # Real-Time Search & Scraping
+│   ├── discovery/                   # Discovery Strategy & Provider Adapters
 │   │   ├── types.ts                 # IDiscoveryAdapter interface
-│   │   ├── LiveGoogleMapsAdapter.ts # Headless Chromium real-time Google Maps crawler
+│   │   ├── GooglePlacesApiAdapter.ts# Primary Google Places API discovery
+│   │   ├── LiveGoogleMapsAdapter.ts # Opt-in Chromium scraper (ALLOW_UNSAFE_MAPS_SCRAPE)
 │   │   ├── SerpApiGoogleMapsAdapter.ts # Structured Google Maps REST API
-│   │   ├── MockDiscoveryAdapter.ts  # Zero-cost local fixture simulator
 │   │   ├── ApifyMapsAdapter.ts      # Apify Actor integration
-│   │   └── OutscraperAdapter.ts     # Outscraper REST client
+│   │   └── MockDiscoveryAdapter.ts  # Zero-cost local fixture simulator
 │   │
 │   ├── auditor/                     # Headless Chromium DOM & UX Auditor
 │   │   ├── types.ts                 # IAuditEngine interface
-│   │   ├── PlaywrightAuditEngine.ts # Dual-viewport mobile (375x812) & desktop DOM inspection
-│   │   └── mockServer.ts            # Embedded simulation server (port 3099)
+│   │   ├── PlaywrightAuditEngine.ts # Dual-viewport inspection & post-nav SSRF revalidation
+│   │   └── mockServer.ts            # Embedded simulation server for integration tests
 │   │
-│   ├── qualification/               # Mathematical Invariants & 4D Scoring
+│   ├── qualification/               # Evidence-Driven Qualification & Relevance
 │   │   ├── UniversalFilterService.ts # Rating >= 4.0, Reviews >= 50, Recency velocity
-│   │   ├── ScoringEngine.ts         # S_rep, S_gap, S_opp, S_conf -> S_total
-│   │   └── OpportunityClassifier.ts # WEBSITE, WEBSITE_AUTOMATION, CUSTOM_OPS_SOFTWARE
+│   │   ├── ScoringEngine.ts         # Weighted heuristic: Reputation, Gap, Opportunity, Confidence
+│   │   ├── CustomerJourneyDetector.ts # Empirical acquisition funnels (Sign-up, RFQ, Book, Visit, Call)
+│   │   ├── OpportunityRelevanceEngine.ts # Business-model aware opportunity evaluation
+│   │   ├── OpportunityClassifier.ts # Tier lookup table (WEBSITE, AUTOMATION, CUSTOM_SOFTWARE)
+│   │   └── QualificationEngine.ts   # First-class lead disposition (PURSUE, NOT_A_FIT, INSUFFICIENT_EVIDENCE)
 │   │
-│   ├── synthesis/                   # Surgical Pitch Deck Formulation
-│   │   └── DossierSynthesizer.ts    # Multi-channel copy (Email, WhatsApp, Phone, Scope)
+│   ├── commercial/                  # Market Context & Economic Profiling
+│   │   ├── BusinessModelClassifier.ts # Maps 7 operating models (SaaS, Ecommerce, Industrial, Clinic, etc.)
+│   │   └── CommercialEconomicsEngine.ts # Local market pricing bands & WBS scopes
 │   │
-│   └── pipeline/                    # Async Background Job Orchestration
-│       └── ScanPipelineService.ts   # Upsert persistence on leads.place_id
+│   ├── synthesis/                   # Sales Intelligence Formulation
+│   │   ├── DossierSynthesizer.ts    # Model-aware pitch deck formulation
+│   │   └── OutreachClaimValidator.ts# Grounded factual claim validation
+│   │
+│   └── pipeline/                    # Local Workstation Job Orchestration
+│       └── ScanPipelineService.ts   # Upsert persistence on leads.place_id & cancellation handles
 │
-├── 🗄️ core/                         # Universal Foundation Layer
+├── 🗄️ core/                         # Universal Workstation Foundation Layer
+│   ├── auth/
+│   │   └── verifyAccess.ts          # Fail-closed API guard & timing-safe comparison
 │   ├── db/
-│   │   ├── index.ts                 # Multi-engine connector (Supabase Postgres / SQLite)
-│   │   └── schema.ts                # Drizzle ORM tables & TypeScript interfaces
-│   └── types/                       # Shared utility types
+│   │   ├── index.ts                 # SQLite on disk connection (WAL mode & busy timeouts)
+│   │   └── schema.ts                # Drizzle ORM schema & TypeScript domain types
+│   └── domain/
+│       └── Guardrails.ts            # Runtime invariant assertion boundaries
 │
 └── 🎨 components/                   # Presentation Layer (React UI)
-    ├── DashboardClient.tsx          # Real-time state manager & active scan polling
-    ├── Header.tsx                   # Live telemetry navigation & stats
-    ├── ScanLauncher.tsx             # Interactive launchpad & market presets
-    ├── LeadMatrixTable.tsx          # Studio data grid with glowing score rings
-    ├── LeadDossierModal.tsx         # Slide-over surgical outreach copy studio
-    └── ScoreGauge.tsx               # Ambient glowing score visualizer
+    ├── DashboardClient.tsx          # Real-time state manager, lock screen & scan polling
+    ├── Header.tsx                   # Live workstation identity & stats
+    ├── ScanLauncher.tsx             # Interactive launchpad & Direct URL audit mode
+    ├── ExecutiveMetrics.tsx         # KPI telemetry summary strip
+    ├── LeadMatrixTable.tsx          # Studio data grid with disposition & score rings
+    ├── LeadInspectorDrawer.tsx      # Slide-over evidence inspector & outreach studio
+    └── LivePipelineBanner.tsx       # Live scanning status & cancel trigger
 ```
 
 ---
@@ -64,18 +81,22 @@ src/
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Operator / Recruiter
+    actor User as Operator
     participant UI as DashboardClient (UI)
+    participant Auth as verifyApiAccess
     participant API as App Router (/api/scans)
     participant Pipe as ScanPipelineService
-    participant Disc as LiveGoogleMapsAdapter / SerpAPI
+    participant Disc as GooglePlacesApiAdapter
     participant Filter as UniversalFilterService
     participant Audit as PlaywrightAuditEngine
+    participant Qual as QualificationEngine
     participant Synth as DossierSynthesizer
-    participant DB as Supabase PostgreSQL / SQLite
+    participant DB as SQLite (lead_engine.db)
 
-    User->>UI: Select niche & market -> Click "Launch Discovery"
-    UI->>API: POST /api/scans
+    User->>UI: Select niche & market -> Click "Scan Market"
+    UI->>API: POST /api/scans (Cookie: lead_engine_token)
+    API->>Auth: verifyApiAccess(request)
+    Auth-->>API: Authorized (null)
     API->>Pipe: executeScan({ niche, location, source })
     Pipe->>DB: INSERT INTO discovery_scans (status: 'RUNNING')
     API-->>UI: 201 Created (scanId)
@@ -91,34 +112,17 @@ sequenceDiagram
                     Pipe->>Audit: auditUrl(websiteUrl)
                     Audit-->>Pipe: AuditTelemetry (DOM findings, viewport, CTAs)
                 else No Website
-                    Note over Pipe: Fast-Track (NO_WEBSITE)
+                    Note over Pipe: Greenfield Presence Build
                 end
-                Pipe->>Synth: synthesize(business, auditTelemetry)
-                Synth-->>Pipe: BusinessDossier + 4D Scores
+                Pipe->>Qual: evaluate(identity, model, audit)
+                Qual-->>Pipe: QualificationResult (PURSUE / NOT_A_FIT)
+                Pipe->>Synth: synthesize(business, auditTelemetry, qualification)
+                Synth-->>Pipe: BusinessDossier
                 Pipe->>DB: UPSERT INTO leads ON CONFLICT (place_id)
             else Rejection Gate
                 Note over Pipe: Excluded from candidate pool
             end
         end
-        Pipe->>DB: UPDATE discovery_scans SET status = 'COMPLETED'
-    end
-
-    loop Every 2000ms Polling
-        UI->>API: GET /api/scans/:id
-        API->>DB: SELECT leads WHERE scan_id = :id
-        DB-->>API: rows[]
-        API-->>UI: 200 OK (scan, leads)
-        UI-->>User: Real-time updated Matrix & Score Rings
+        Pipe->>DB: UPDATE discovery_scans (status: 'COMPLETED')
     end
 ```
-
----
-
-## 3. The 4-Dimension Mathematical Scoring Engine
-
-$$\begin{aligned}
-S_{\text{rep}} &= \min\left(50, \max\left(0, \frac{\text{rating} - 3.5}{1.5} \times 50\right)\right) + \min\left(30, \frac{\log_{10}(\text{reviews})}{\log_{10}(500)} \times 30\right) + \text{MomentumBonus} \\
-S_{\text{gap}} &= \begin{cases} 100 & \text{if No Website} \\ \min(100, \Delta_{\text{SSL}} + \Delta_{\text{viewport}} + \Delta_{\text{overflow}} + \Delta_{\text{CTA}} + \Delta_{\text{booking}}) & \text{if Audited} \end{cases} \\
-S_{\text{opp}} &= \begin{cases} 95 & \text{Custom Operational Software} \\ 85 & \text{Website + Automation} \\ 75 & \text{Website Gap} \end{cases} \\
-S_{\text{total}} &= \left(S_{\text{rep}} \times 0.35\right) + \left(S_{\text{gap}} \times 0.40\right) + \left(S_{\text{opp}} \times 0.25\right)
-\end{aligned}$$

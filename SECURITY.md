@@ -1,43 +1,42 @@
 # Security & Threat Model Document
-## Project: Private Client Discovery & High-Conviction Lead Engine (V1)
+## Project: Lead Engine — Local Workstation Security & Defense Model
 
 ---
 
-## 1. Threat Modeling & Security Scope
+## 1. Threat Modeling & Scope
 
-Because this is a **private, proprietary client acquisition engine** operated directly by the agency founder on a dedicated server or local machine, the security surface focuses primarily on:
-1. **Network & Webhook Egress / SSRF Defense**: Preventing Server-Side Request Forgery during automated headless browser audits.
-2. **Headless Browser Sandboxing & Execution Isolation**: Defending against malicious JavaScript execution, endless redirection loops, memory exhaustion, and DOM-based exploits.
-3. **Data Protection & Zero Secrets Leak Invariant**: Absolute isolation of API keys (Apify, Outscraper, OpenAI, Gemini) and database credentials.
-4. **Input Sanitization & Injection Defense**: Preventing SQL injection, command injection, and script injection via scraped web content.
-5. **Content Security Policy (CSP) & HTTP Security Headers**: Hardening the command center frontend.
+Lead Engine is designed as a **local-first, single-operator acquisition workstation**. Its security model enforces:
+1. **Fail-Closed API Authentication**: Protects all discovery, audit, and data export endpoints using `LEAD_ENGINE_API_SECRET` with constant-time hash comparisons (`crypto.timingSafeEqual`) and httpOnly `SameSite=Strict` session cookies.
+2. **Network & SSRF Defense**: Dual-stage Server-Side Request Forgery prevention (pre-navigation DNS resolution filtering + post-navigation redirect URL validation).
+3. **Headless Browser Sandboxing & Execution Isolation**: Ephemeral browser contexts per audit, disabling web security bypasses, and strictly bounded timeouts.
+4. **CSV Formula Injection Defense**: All exported spreadsheet cells starting with `= + - @ \t \r` are sanitized with single-quote prefixes.
+5. **Zero Secrets Leak**: Server-side API key isolation with zero client-side Google Maps keys exposed.
 
 ---
 
 ## 2. Security Defense Invariants
 
-### 2.1 SSRF & Playwright Headless Browser Hardening
-When crawling arbitrary target URLs:
-- **Private IP Blocking**: The headless auditor will strictly reject requests targeting private/internal network ranges (`127.0.0.1`, `localhost`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.169.254` cloud metadata endpoints).
-- **Navigation Timeout Bounds**: Every page navigation is bounded by a strict `15,000ms` hard timeout.
-- **Resource Download Restrictions**: Disables download of executable files (`.exe`, `.dmg`, `.sh`, `.zip`) during page inspection.
-- **Isolated Contexts**: Every audit runs in an ephemeral, freshly created Playwright browser context that is completely destroyed immediately after telemetry extraction, preventing cookie or session leakage between targets.
+### 2.1 Fail-Closed Authentication & Session Management
+- **Secret Verification**: Calls to `/api/*` require either `x-engine-secret`, `Authorization: Bearer <secret>`, or the httpOnly cookie `lead_engine_token`.
+- **Fail-Closed Default**: If `LEAD_ENGINE_API_SECRET` is unset, all mutating and exporting routes return `401 Unauthorized` unless `ALLOW_INSECURE_LOCAL_AUTH=true` is explicitly configured in a non-production environment.
+- **Timing Attack Prevention**: Uses SHA-256 digest buffer comparison via `crypto.timingSafeEqual` to eliminate timing side-channels.
 
-### 2.2 Zero Secrets Leak Invariant
-- All API keys, tokens, and database connection strings MUST be stored in `.env.local` and strictly excluded via `.gitignore`.
-- Zero credentials or tokens shall ever be committed to git history or included in client-side bundles.
-- Client-side code accesses backend data solely through Next.js server actions / API endpoints without exposing raw environment variables (`NEXT_PUBLIC_` prefixes restricted to non-sensitive UI config).
+### 2.2 Dual-Stage SSRF Defense (Pre-Check + Post-Navigation Recheck)
+When auditing arbitrary target URLs:
+1. **Pre-Navigation Check**: Resolves all DNS A/AAAA records and rejects private/loopback/cloud metadata IP ranges (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.169.254`, IPv4-mapped IPv6, carrier-grade NAT).
+2. **Post-Navigation Destination Recheck**: After `page.goto()`, inspects `page.url()`. If any HTTP redirect (301/302/307) leads to a restricted internal/private IP or metadata endpoint, the context is immediately terminated and an error is thrown.
+3. **Strict 8,000ms Timeout**: Navigation is bounded by a hard `8,000ms` timeout.
+4. **Context Isolation**: Every audit runs in an ephemeral, freshly created Playwright browser context that is destroyed immediately after inspection.
 
-### 2.3 Input Sanitization & SQL Injection Defenses
-- All database queries are executed through **Drizzle ORM** parameterized queries, mathematically eliminating raw SQL concatenation vulnerabilities.
-- All user-supplied query strings (`niche`, `location`, `radiusKm`) are validated via strict Zod schemas before being passed to discovery adapters.
+### 2.3 CSV Formula Injection Defense
+In `/api/leads/export`, cell values are inspected. Any string beginning with dangerous spreadsheet formula triggers (`=`, `+`, `-`, `@`, `\t`, `\r`) is automatically prefixed with `'` to neutralize formula execution in Microsoft Excel and Google Sheets.
 
-### 2.4 XSS & DOM Sanitization
-- Scraped business titles, review snippets, and DOM texts rendered in the Command Center UI are treated as untrusted strings and safely escaped by React 19's virtual DOM.
-- Raw HTML rendering (`dangerouslySetInnerHTML`) is strictly banned.
+### 2.4 Server-Side Secret Isolation
+- All third-party provider keys (`GOOGLE_MAPS_API_KEY`, `SERPAPI_API_KEY`, `APIFY_API_TOKEN`, `OPENAI_API_KEY`) are accessed strictly on the server side.
+- No client-side Google Maps API keys (`NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`) are permitted in codebase files.
 
-### 2.5 HTTP Security Headers
-Every HTTP response served by the command center includes standard OWASP-recommended headers:
+### 2.5 HTTP Security Headers & CSP
+Every response served by the command center includes standard security headers:
 - `X-Frame-Options: DENY`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`

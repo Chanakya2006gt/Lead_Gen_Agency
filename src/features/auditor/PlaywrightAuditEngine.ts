@@ -9,14 +9,17 @@ export class PlaywrightAuditEngine implements IAuditEngine {
 
   private async getBrowser(): Promise<Browser> {
     if (!this.browser || !this.browser.isConnected()) {
+      const launchArgs = [
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+      ];
+      if (process.env.PLAYWRIGHT_NO_SANDBOX === "1") {
+        launchArgs.push("--no-sandbox");
+      }
       this.browser = await chromium.launch({
         headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-        ],
+        args: launchArgs,
       });
     }
     return this.browser;
@@ -178,11 +181,20 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     try {
       await mobilePage.goto(targetUrl, {
         waitUntil: "domcontentloaded",
-        timeout: 4000,
+        timeout: 8000,
       });
+      // Post-Navigation SSRF Revalidation: verify destination redirect URL
+      const finalMobileUrl = mobilePage.url();
+      if (finalMobileUrl && finalMobileUrl !== "about:blank") {
+        await PlaywrightAuditEngine.validateUrlSecurity(finalMobileUrl, allowLocalhostForTesting);
+      }
       await mobilePage.waitForTimeout(300);
       initialLoadLatencyMs = Date.now() - startTime;
     } catch (err: any) {
+      if (err.message?.includes("Forbidden") || err.message?.includes("SSRF")) {
+        await mobileContext.close();
+        throw err;
+      }
       initialLoadLatencyMs = Date.now() - startTime;
       findings.push({
         category: "technical",
@@ -288,10 +300,19 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     try {
       await desktopPage.goto(targetUrl, {
         waitUntil: "domcontentloaded",
-        timeout: 4000,
+        timeout: 8000,
       });
+      // Post-Navigation SSRF Revalidation
+      const finalDesktopUrl = desktopPage.url();
+      if (finalDesktopUrl && finalDesktopUrl !== "about:blank") {
+        await PlaywrightAuditEngine.validateUrlSecurity(finalDesktopUrl, allowLocalhostForTesting);
+      }
       await desktopPage.waitForTimeout(300);
-    } catch {
+    } catch (err: any) {
+      if (err.message?.includes("Forbidden") || err.message?.includes("SSRF")) {
+        await desktopContext.close();
+        throw err;
+      }
       // Ignore desktop secondary timeout
     }
 
@@ -302,12 +323,15 @@ export class PlaywrightAuditEngine implements IAuditEngine {
     };
     try {
       desktopSignals = await desktopPage.evaluate(() => {
-        const forms = Array.from(document.querySelectorAll("form"));
-        const hasInteractiveBookingForm =
-          forms.length > 0 ||
-          document.querySelectorAll(
-            'input[type="date"], input[type="time"], select, iframe[src*="calendly"], iframe[src*="acuity"], iframe[src*="setmore"], iframe[src*="cal.com"]'
-          ).length > 0;
+        const bookingWidgets = document.querySelectorAll(
+          'input[type="date"], input[type="time"], iframe[src*="calendly"], iframe[src*="acuity"], iframe[src*="setmore"], iframe[src*="cal.com"], a[href*="calendly"], a[href*="cal.com"]'
+        );
+        const bookingForms = Array.from(document.querySelectorAll("form")).filter((f) => {
+          const formText = (f.textContent || "").toLowerCase();
+          const formAttr = `${f.getAttribute("action") || ""} ${f.getAttribute("id") || ""} ${f.className || ""}`.toLowerCase();
+          return /appointment|book|schedule|consultation|reserve/.test(`${formText} ${formAttr}`);
+        });
+        const hasInteractiveBookingForm = bookingWidgets.length > 0 || bookingForms.length > 0;
 
         const links = Array.from(document.querySelectorAll("a"));
         const sampleLinks = links

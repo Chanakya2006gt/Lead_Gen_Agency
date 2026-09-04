@@ -9,7 +9,7 @@ import { LeadMatrixTable } from "@/components/LeadMatrixTable";
 import { LeadInspectorDrawer } from "@/components/LeadInspectorDrawer";
 import { LivePipelineBanner } from "@/components/LivePipelineBanner";
 import { Lead, DiscoveryScan, HumanStatus } from "@/core/db/schema";
-import { Loader2, RefreshCw, X, Trash2, ChevronDown } from "lucide-react";
+import { Loader2, RefreshCw, X, Trash2, ChevronDown, Lock, ShieldCheck } from "lucide-react";
 
 export function DashboardClient() {
   const [scans, setScans] = useState<DiscoveryScan[]>([]);
@@ -19,12 +19,21 @@ export function DashboardClient() {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [secretInput, setSecretInput] = useState("");
+  const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Fetch all scans
   const fetchScans = useCallback(async () => {
     try {
       const res = await fetch("/api/scans");
+      if (res.status === 401) {
+        setIsLocked(true);
+        return;
+      }
       if (res.ok) {
+        setIsLocked(false);
         const text = await res.text();
         try {
           const data = JSON.parse(text);
@@ -43,6 +52,32 @@ export function DashboardClient() {
       console.error("Error fetching scans:", err);
     }
   }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!secretInput.trim()) return;
+    setIsLoggingIn(true);
+    setAuthErrorMsg(null);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: secretInput.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setIsLocked(false);
+        setSecretInput("");
+        fetchScans();
+      } else {
+        setAuthErrorMsg(data?.error || "Authentication failed.");
+      }
+    } catch (err: any) {
+      setAuthErrorMsg(err.message || "Login request failed.");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
 
   // Fetch leads for active scan
   const fetchScanDetails = useCallback(async (scanId: string) => {
@@ -147,10 +182,14 @@ export function DashboardClient() {
   };
 
   const handleClearAllScans = async () => {
-    if (!confirm("Are you sure you want to clear all discovery scan history?")) return;
+    const confirmation = window.prompt("Type DESTROY_ALL to wipe all scans and lead history:");
+    if (confirmation !== "DESTROY_ALL") return;
+
     try {
       const res = await fetch("/api/scans", {
         method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "DESTROY_ALL" }),
       });
       if (res.ok) {
         setScans([]);
@@ -190,6 +229,46 @@ export function DashboardClient() {
   const visibleScans = scans.slice(0, 4);
   const overflowScans = scans.slice(4);
 
+  if (isLocked) {
+    return (
+      <div className="min-h-screen bg-[#070A10] flex items-center justify-center p-4 relative text-slate-100">
+        <div className="fixed top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-0">
+          <img
+            src="/assets/hero-bg.jpg"
+            alt="Atmospheric Background"
+            className="w-full h-full object-cover object-[center_20%] opacity-100 contrast-[1.3] brightness-[1.25] saturate-[1.15]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#070A10]/90 via-black/50 to-black/70 pointer-events-none" />
+        </div>
+
+        <div className="w-full max-w-sm card-surface p-6 z-10 space-y-4">
+          <div className="flex items-center gap-2">
+            <Lock className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Workstation Locked</h2>
+          </div>
+          <p className="text-xs text-slate-400">Enter LEAD_ENGINE_API_SECRET to authenticate your workstation session.</p>
+          <form onSubmit={handleLogin} className="space-y-3">
+            <input
+              type="password"
+              value={secretInput}
+              onChange={(e) => setSecretInput(e.target.value)}
+              placeholder="Workstation Secret"
+              required
+              className="w-full px-3.5 py-2 rounded-lg bg-slate-900/80 border border-white/[0.15] text-slate-100 text-xs font-mono focus:outline-none focus:border-indigo-400"
+            />
+            {authErrorMsg && <p className="text-rose-400 text-xs font-mono">{authErrorMsg}</p>}
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+            >
+              {isLoggingIn ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>Unlock Workstation</span>}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-screen bg-[#070A10] flex flex-col text-slate-100 relative selection:bg-indigo-500 selection:text-white">
       {/* Prominent High-Contrast Atmospheric Background Wallpaper Layer */}

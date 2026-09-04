@@ -1,24 +1,25 @@
-# ⚡ Lead Engine — High-Conviction B2B Client Discovery & Technical Audit Workstation
+# ⚡ Lead Engine — Local-First B2B Client Acquisition & Technical Audit Workstation
 
 [![Next.js 15](https://img.shields.io/badge/Next.js-15.1-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Playwright](https://img.shields.io/badge/Playwright-Headless_Audits-green?logo=playwright)](https://playwright.dev/)
 [![Drizzle ORM](https://img.shields.io/badge/Drizzle_ORM-0.38-orange?logo=drizzle)](https://orm.drizzle.team/)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-emerald?logo=supabase)](https://supabase.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![SQLite](https://img.shields.io/badge/SQLite-WAL_Mode-blue?logo=sqlite)](https://sqlite.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> An open-source, high-conviction client discovery and qualification engine. Finds high-reputation local operating businesses in real-time, executes headless Chromium DOM audits (mobile & desktop), classifies technical software opportunities, and synthesizes surgical, evidence-backed multi-channel pitch decks (Cold Email, WhatsApp, Phone Gatekeeper scripts).
+> A local-first, single-operator client acquisition and qualification workstation. Discovers high-reputation operating businesses in real-time, executes headless Chromium DOM audits (mobile & desktop), evaluates evidence-driven commercial relevance, and determines whether an entity is worth pursuing or `NOT A FIT`.
 
 ---
 
 ## 🌟 Key Capabilities
 
-* **🌐 Real-Time Discovery Engine**: Search any city and niche via native Playwright headless browser scraping or dedicated REST APIs (SerpAPI, Apify, Outscraper).
-* **🛡️ 13 Core Invariant Rules**: Mathematical qualification gates ($\ge 4.0★$ rating, $\ge 50$ reviews, 30d/90d/180d recency velocity curves).
+* **🌐 Google Places Discovery**: Discovers high-reputation commercial entities via official Google Places API (with opt-in flags for specialized scrapers).
+* **🛡️ Hard Qualification Gates**: Filters candidates through empirical reputation gates ($\ge 4.0★$ rating, $\ge 50$ verified reviews, plus longitudinal review velocity curves).
 * **🔍 Headless Chromium DOM Auditor**: Dual-viewport mobile (`375x812`) & desktop (`1440x900`) inspection detecting broken viewports, layout overflow, missing booking funnels, broken anchors, and SSL status.
-* **📊 4D Mathematical Scoring**: Evaluates leads across Reputation Velocity, Digital Surface Gap, Opportunity Leverage, and DOM Confidence.
-* **🎯 Surgical Pitch Studio**: Instantly formats empirical outreach copy (Cold Email, WhatsApp Voice Note angles, Front-Desk Gatekeeper scripts, and Technical Deliverables blueprints).
-* **💾 Dual Database Engine**: Zero-config local **SQLite** out-of-the-box or **Supabase / PostgreSQL** for cloud hosting.
+* **🧠 Evidence-Driven Qualification ("Not Your Client" Detection)**: Explicitly identifies business models (SaaS, E-commerce, Industrial, Clinic) and rejects non-fit entities (`NOT A FIT`) rather than manufacturing generic web agency gaps.
+* **📊 Weighted Heuristic Scoring**: Evaluates leads across Reputation (30%), Digital Surface Gap (35%), Opportunity Fit (20%), and Evidence Confidence (15%).
+* **🎯 Surgical Pitch Studio**: Formats empirical outreach copy gated by qualification (Cold Email, WhatsApp, Phone Gatekeeper scripts, and Technical WBS blueprints).
+* **💾 Local SQLite on Disk**: Zero-config local **SQLite** database (`lead_engine.db`) in WAL mode with busy timeout handling.
 
 ---
 
@@ -30,7 +31,7 @@ git clone https://github.com/Chanakya2006gt/Lead_Gen_Agency.git
 cd Lead_Gen_Agency
 ```
 
-### 2. Install Dependencies & Playwright Browser
+### 2. Install Dependencies & Playwright Chromium
 ```bash
 npm install
 npx playwright install chromium
@@ -40,9 +41,8 @@ npx playwright install chromium
 ```bash
 cp .env.example .env.local
 ```
-*(By default, it uses zero-config local SQLite. To use Supabase, paste your Supabase connection string into `.env.local`)*
 
-### 4. Start the Application
+### 4. Start Local Development Workstation
 ```bash
 npm run dev
 ```
@@ -50,24 +50,13 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
-## ☁️ Deploying to Vercel / Cloud
+## 🔒 Security & Workstation Authentication
 
-1. Push this repository to your GitHub account.
-2. Go to [Vercel](https://vercel.com/) and import the repository.
-3. In Vercel Project Settings, add your **Environment Variables**:
-   - `DATABASE_MODE=postgres`
-   - `DATABASE_URL=your_supabase_connection_pooling_uri`
-   - `SERPAPI_API_KEY=your_optional_serpapi_key`
-4. Click **Deploy**.
+1. **Workstation Secret**: Set `LEAD_ENGINE_API_SECRET=your_secure_password` in `.env.local` to lock all mutating API routes and enable httpOnly session cookies.
+2. **Local Dev Bypass**: To run unauthenticated in development, set `ALLOW_INSECURE_LOCAL_AUTH=true`. In production, missing secrets fail closed with `401 Unauthorized`.
+3. **SSRF Defense**: Dual-stage DNS pre-filtering and post-navigation redirect revalidation blocks access to private network ranges and cloud metadata endpoints (`169.254.169.254`).
 
----
-
-## 🗄️ Setting Up Supabase (Optional)
-
-1. Create a free project at [supabase.com](https://supabase.com/).
-2. Open the **SQL Editor** in your Supabase dashboard.
-3. Copy and paste the contents of [`supabase/schema.sql`](supabase/schema.sql) and click **RUN**.
-4. In Supabase **Project Settings $\rightarrow$ Database**, copy the **Connection Pooling URI** and paste it as `DATABASE_URL` in `.env.local`.
+For runtime details, see [`docs/RUNTIME.md`](docs/RUNTIME.md) and [`SECURITY.md`](SECURITY.md).
 
 ---
 
@@ -87,4 +76,4 @@ npm run build
 ---
 
 ## 📜 License
-MIT License. Free to use, modify, and distribute for personal and commercial agency acquisition.
+MIT License. See [LICENSE](LICENSE) for details.

@@ -16,9 +16,15 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "PORT=3098 PLAYWRIGHT_TEST=1 npx next dev -p 3098",
+    command: "npx next dev -p 3098",
     url: "http://localhost:3098",
-    reuseExistingServer: true,
-    timeout: 120000,
+    reuseExistingServer: !process.env.CI,
+    stdout: "pipe",
+    stderr: "pipe",
+    timeout: 60000,
+    env: {
+      PORT: "3098",
+      ALLOW_INSECURE_LOCAL_AUTH: "true",
+    },
   },
 });
