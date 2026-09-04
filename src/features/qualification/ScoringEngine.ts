@@ -85,12 +85,14 @@ export class ScoringEngine {
     switch (opportunityType) {
       case "CUSTOM_OPERATIONAL_SOFTWARE":
         return 95;
-      case "WEBSITE_AUTOMATION":
-        return 85;
-      case "WEBSITE":
+      case "DISCONNECTED_GBP_WEBSITE":
         return 75;
+      case "WEBSITE_AUTOMATION":
+        return 70;
+      case "WEBSITE":
+        return 60;
       default:
-        return 50;
+        return 40;
     }
   }
 

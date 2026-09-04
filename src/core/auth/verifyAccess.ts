@@ -20,7 +20,7 @@ export function verifyApiAccess(request: Request): NextResponse | null {
     const isLocalDev = process.env.NODE_ENV !== "production";
     const allowInsecure = process.env.ALLOW_INSECURE_LOCAL_AUTH === "true";
 
-    if (allowInsecure) {
+    if (allowInsecure && isLocalDev) {
       return null; // Explicit local development permission granted
     }
 

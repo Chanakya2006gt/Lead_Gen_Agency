@@ -15,9 +15,9 @@ describe("ScoringEngine (4D Mathematical Model)", () => {
     });
 
     expect(scores.digitalGapScore).toBe(100);
-    expect(scores.opportunityScore).toBe(75);
+    expect(scores.opportunityScore).toBe(60);
     expect(scores.reputationScore).toBeGreaterThan(80);
-    expect(scores.overallLeadScore).toBeGreaterThan(85);
+    expect(scores.overallLeadScore).toBeGreaterThan(80);
   });
 
   it("Computes empirical gap scores when site lacks mobile viewport and SSL", () => {

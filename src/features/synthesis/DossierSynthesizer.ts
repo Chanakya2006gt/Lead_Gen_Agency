@@ -1,5 +1,4 @@
 import { BusinessDossier, AuditTelemetry, ReviewTrend, SignalProvenance, GoogleEvidence, LeadDisposition } from "@/core/db/schema";
-import { OpportunityClassifier } from "@/features/qualification/OpportunityClassifier";
 import { ScoringEngine } from "@/features/qualification/ScoringEngine";
 import { CommercialEconomicsEngine } from "@/features/commercial/CommercialEconomicsEngine";
 import { BusinessModelClassifier } from "@/features/commercial/BusinessModelClassifier";

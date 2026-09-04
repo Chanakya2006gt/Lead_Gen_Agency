@@ -148,7 +148,7 @@ describe("Evidence-Driven Lead Qualification & 'Not Your Client' Detection Suite
       opportunityAssessment,
     });
 
-    expect(qualification.disposition).toBe("LOW_OPPORTUNITY");
+    expect(qualification.disposition).toBe("NURTURE");
     expect(qualification.outreachAllowed).toBe(false);
   });
 

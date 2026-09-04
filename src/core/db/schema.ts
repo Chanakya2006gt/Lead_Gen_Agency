@@ -6,7 +6,7 @@ export * from "@/features/commercial/types";
 export type ReviewTrend = "GROWING" | "STABLE" | "DECLINING" | "STALE" | "UNKNOWN";
 export type OpportunityType = "WEBSITE" | "WEBSITE_AUTOMATION" | "CUSTOM_OPERATIONAL_SOFTWARE" | "DISCONNECTED_GBP_WEBSITE" | "UNKNOWN";
 export type HumanStatus = "NEW" | "REVIEWED" | "READY_FOR_OUTREACH" | "ARCHIVED";
-export type LeadDisposition = "PURSUE" | "LOW_OPPORTUNITY" | "NOT_A_FIT" | "INSUFFICIENT_EVIDENCE";
+export type LeadDisposition = "PURSUE" | "PURSUE_LOW_TOUCH" | "NURTURE" | "NOT_A_FIT" | "INSUFFICIENT_EVIDENCE";
 
 export interface AuditFinding {
   category: "technical" | "ux" | "conversion" | "operational";

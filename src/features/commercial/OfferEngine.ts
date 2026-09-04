@@ -152,6 +152,7 @@ export class OfferEngine {
       const careMin = isINR ? 500 : 50;
       const careMax = isINR ? 1500 : 150;
 
+      const currSym = isINR ? "₹" : currency === "GBP" ? "£" : currency === "AED" ? "د.إ " : "$";
       return {
         feasibleOfferWindow: {
           status: "DOWN_SCOPED",
@@ -184,9 +185,11 @@ export class OfferEngine {
           basis: "COMMERCIAL_CEILING_CLAMPED",
         },
         downscopedScopeDescription: "Lean High-Conversion MVP: 1-tap WhatsApp consultation triggers, mobile layout fixes, and Google Maps linkage (non-essential custom modules deferred).",
-        commercialRationale: `Full solution exceeds client ceiling (₹${clientCeilingMax.toLocaleString()}). Transformed scope to high-ROI lean MVP (${leanHours} hrs) to preserve delivery margin and match buyer reality.`,
+        commercialRationale: `Full solution exceeds client ceiling (${currSym}${clientCeilingMax.toLocaleString()}). Transformed scope to high-ROI lean MVP (${leanHours} hrs) to preserve delivery margin and match buyer reality.`,
       };
     }
+
+    const currSym = isINR ? "₹" : currency === "GBP" ? "£" : currency === "AED" ? "د.إ " : "$";
 
     // IMPOSSIBLE WINDOW: Even minimal viable delivery floor exceeds client's commercial ceiling
     return {
@@ -221,7 +224,7 @@ export class OfferEngine {
         confidence: 0.4,
         basis: "COMMERCIAL_CEILING_CLAMPED",
       },
-      commercialRationale: `Commercial ceiling (₹${clientCeilingMax.toLocaleString()}) is below minimum profitable delivery cost (₹${fullTheoreticalFloor.toLocaleString()}). Unfavorable unit economics.`,
+      commercialRationale: `Commercial ceiling (${currSym}${clientCeilingMax.toLocaleString()}) is below minimum profitable delivery cost (${currSym}${fullTheoreticalFloor.toLocaleString()}). Unfavorable unit economics.`,
     };
   }
 }

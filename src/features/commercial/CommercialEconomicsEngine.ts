@@ -63,7 +63,7 @@ export class CommercialEconomicsEngine {
       category: params.category,
       serviceType,
       marketContext,
-      hasObservedMarketEvidence: true,
+      hasObservedMarketEvidence: false,
     });
 
     // 6. Client Commercial Ceiling

@@ -26,6 +26,20 @@ describe("Fail-Closed API Authentication Guard (verifyApiAccess)", () => {
     expect(result?.status).toBe(401);
   });
 
+  it("Denies access (401) in production even if ALLOW_INSECURE_LOCAL_AUTH is set to 'true'", () => {
+    delete process.env.LEAD_ENGINE_API_SECRET;
+    process.env.ALLOW_INSECURE_LOCAL_AUTH = "true";
+    (process.env as any).NODE_ENV = "production";
+
+    const req = new Request("http://localhost:3000/api/scans", {
+      method: "GET",
+    });
+
+    const result = verifyApiAccess(req);
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(401);
+  });
+
   it("Denies access (401) in development when ALLOW_INSECURE_LOCAL_AUTH is not set to 'true'", () => {
     delete process.env.LEAD_ENGINE_API_SECRET;
     delete process.env.ALLOW_INSECURE_LOCAL_AUTH;

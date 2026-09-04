@@ -1,17 +1,23 @@
 import { describe, it, expect } from "vitest";
 import { SecondaryDomainResolver } from "@/features/discovery/SecondaryDomainResolver";
-import { OpportunityClassifier } from "@/features/qualification/OpportunityClassifier";
+import { OpportunityRelevanceEngine } from "@/features/qualification/OpportunityRelevanceEngine";
+import { BusinessModelClassifier } from "@/features/commercial/BusinessModelClassifier";
 import { DossierSynthesizer } from "@/features/synthesis/DossierSynthesizer";
 
 describe("SecondaryDomainResolver & GBP Disconnect Suite", () => {
-  it("OpportunityClassifier assigns DISCONNECTED_GBP_WEBSITE when isGbpDisconnected is true", () => {
-    const opp = OpportunityClassifier.classify({
+  it("OpportunityRelevanceEngine assigns DISCONNECTED_GBP_WEBSITE when isGbpDisconnected is true", () => {
+    const businessModel = BusinessModelClassifier.classify({
+      name: "Sowjanya Dental",
+      category: "Dental Clinics",
+    });
+    const opp = OpportunityRelevanceEngine.evaluate({
+      name: "Sowjanya Dental",
+      businessModel,
       hasWebsite: false,
       isGbpDisconnected: true,
-      reviewCount: 317,
-      rating: 4.9,
+      unlinkedWebsiteUrl: "https://sowjanyadental.in",
     });
-    expect(opp).toBe("DISCONNECTED_GBP_WEBSITE");
+    expect(opp.opportunityType).toBe("DISCONNECTED_GBP_WEBSITE");
   });
 
   it("DossierSynthesizer synthesizes specialized GBP reconnection pitch and scope", async () => {

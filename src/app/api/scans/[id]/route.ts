@@ -59,9 +59,9 @@ export async function DELETE(
     // 1. Immediately cancel background crawling and audit workers
     await ScanPipelineService.cancelScan(scanId);
 
-    // 2. Safely remove leads and scan within an atomic transaction
+    // 2. Safely detach leads and delete scan within an atomic transaction
     db.transaction((tx) => {
-      tx.delete(leads).where(eq(leads.scanId, scanId)).run();
+      tx.update(leads).set({ scanId: null }).where(eq(leads.scanId, scanId)).run();
       tx.delete(discoveryScans).where(eq(discoveryScans.id, scanId)).run();
     });
 

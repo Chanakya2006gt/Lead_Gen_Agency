@@ -15,14 +15,14 @@ export async function POST(request: Request) {
     const useSecureCookie = process.env.NODE_ENV === "production" && isHttps && !isLocalhost;
 
     if (!configuredSecret || configuredSecret.trim().length === 0) {
-      if (process.env.NODE_ENV !== "production" || process.env.ALLOW_INSECURE_LOCAL_AUTH === "true") {
+      if (process.env.NODE_ENV !== "production" && process.env.ALLOW_INSECURE_LOCAL_AUTH === "true") {
         const response = NextResponse.json({ success: true, message: "Local insecure authentication allowed." });
         response.cookies.set("lead_engine_token", "insecure_local_dev", {
           httpOnly: true,
           secure: useSecureCookie,
           sameSite: "strict",
           path: "/",
-          maxAge: 60 * 60 * 24 * 7, // 7 days
+          maxAge: 60 * 60 * 24 * 30, // 30 days
         });
         return response;
       }
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       secure: useSecureCookie,
       sameSite: "strict",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 30, // 30 days
     });
 
     return response;

@@ -19,6 +19,11 @@ jobs:
     env:
       NODE_ENV: test
       PLAYWRIGHT_TEST: "1"
+      LEAD_ENGINE_API_SECRET: "ci-secret-passphrase-testing"
+      ALLOW_INSECURE_LOCAL_AUTH: "true"
+      ALLOW_UNSAFE_MAPS_SCRAPE: "false"
+      PLAYWRIGHT_NO_SANDBOX: "true"
+      DATABASE_URL: "./lead_engine_test.db"
 
     steps:
       - name: Checkout Code

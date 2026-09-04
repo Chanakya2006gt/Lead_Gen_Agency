@@ -419,7 +419,7 @@ export class ScanPipelineService {
                     .set({
                       scanId, // Associate with current discovery scan
                       name: business.name,
-                      category: business.category || options.niche,
+                      category: business.category || null,
                       formattedAddress: effectiveAddress,
                       phone: effectivePhone,
                       googleMapsUrl: effectiveMapsUrl,
@@ -465,7 +465,7 @@ export class ScanPipelineService {
                     scanId,
                     placeId,
                     name: business.name,
-                    category: business.category || options.niche,
+                    category: business.category || null,
                     formattedAddress: effectiveAddress,
                     phone: effectivePhone,
                     googleMapsUrl: effectiveMapsUrl,

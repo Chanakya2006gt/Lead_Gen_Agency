@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { GET as getSuggestions } from "@/app/api/discovery/suggestions/route";
-import { GET as getScans, POST as postScans, DELETE as deleteScans } from "@/app/api/scans/route";
+import { GET as getScans, POST as postScans } from "@/app/api/scans/route";
+import { DELETE as deleteScanById } from "@/app/api/scans/[id]/route";
 import { GET as exportLeads } from "@/app/api/leads/export/route";
 import { POST as directAudit } from "@/app/api/audit/direct/route";
 import { NextRequest } from "next/server";
@@ -50,23 +51,10 @@ describe("API Routes Fail-Closed Authentication & Invariant Integration Suite", 
     });
     const directRes = await directAudit(directReq);
     expect(directRes.status).toBe(401);
-  });
 
-  it("DELETE /api/scans requires explicit { confirm: 'DESTROY_ALL' }", async () => {
-    process.env.LEAD_ENGINE_API_SECRET = "test-secret";
-
-    const deleteReqWithoutConfirm = new Request("http://localhost:3000/api/scans", {
-      method: "DELETE",
-      headers: {
-        "x-engine-secret": "test-secret",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ confirm: "wrong" }),
-    });
-
-    const res = await deleteScans(deleteReqWithoutConfirm);
-    expect(res.status).toBe(400);
-    const json = await res.json();
-    expect(json.error).toContain("DESTROY_ALL");
+    // 6. DELETE /api/scans/:id
+    const deleteReq = new Request("http://localhost:3000/api/scans/test_scan_1", { method: "DELETE" });
+    const deleteRes = await deleteScanById(deleteReq, { params: Promise.resolve({ id: "test_scan_1" }) });
+    expect(deleteRes.status).toBe(401);
   });
 });

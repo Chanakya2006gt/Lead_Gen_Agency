@@ -54,7 +54,7 @@ export class MarketBenchmarkEngine {
       sampleSize: hasEvidence ? 24 : 0,
       sources: [
         {
-          source: hasEvidence ? "Aggregated Regional Agency Quote Database" : "Sector Baseline Fallback Prior",
+          source: hasEvidence ? "Verified Regional Market Sample" : "Sector Baseline Fallback Prior",
           dateObserved: "2026-08-15",
           notes: hasEvidence ? "Empirical market pricing data from active regional agency bids." : "Fallback baseline prior; subject to empirical recalibration.",
         },

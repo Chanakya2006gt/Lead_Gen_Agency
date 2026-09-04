@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/core/db";
-import { discoveryScans, leads } from "@/core/db/schema";
+import { discoveryScans } from "@/core/db/schema";
 import { ScanPipelineService } from "@/features/pipeline/ScanPipelineService";
 import { verifyApiAccess } from "@/core/auth/verifyAccess";
 import { desc } from "drizzle-orm";
@@ -63,36 +63,5 @@ export async function POST(request: Request) {
     }
     console.error("POST /api/scans error:", err);
     return NextResponse.json({ error: "Failed to initialize discovery scan" }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request) {
-  const authError = verifyApiAccess(request);
-  if (authError) return authError;
-
-  try {
-    let body: any = {};
-    try {
-      body = await request.json();
-    } catch {
-      body = {};
-    }
-
-    if (body.confirm !== "DESTROY_ALL") {
-      return NextResponse.json(
-        { error: "Explicit confirmation required. Body must include { confirm: 'DESTROY_ALL' }." },
-        { status: 400 }
-      );
-    }
-
-    db.transaction((tx) => {
-      tx.delete(leads).run();
-      tx.delete(discoveryScans).run();
-    });
-
-    return NextResponse.json({ success: true, message: "All scan history and leads cleared." });
-  } catch (err: any) {
-    console.error("DELETE /api/scans error:", err);
-    return NextResponse.json({ error: "Failed to clear scan history" }, { status: 500 });
   }
 }

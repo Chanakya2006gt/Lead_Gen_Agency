@@ -17,10 +17,9 @@ if (dbPath.startsWith("sqlite:")) {
   dbPath = dbPath.replace("sqlite:", "");
 }
 
-// Intercept Postgres URLs: Fail explicit / fallback to local SQLite workstation
+// Intercept Postgres URLs: Fail explicit (Workstation is SQLite on disk)
 if (dbPath.startsWith("postgres://") || dbPath.startsWith("postgresql://")) {
-  console.warn("\x1b[33m[Workstation Runtime Warning]\x1b[0m Postgres runtime is not implemented; falling back to local SQLite at ./lead_engine.db. (Set DATABASE_URL=./lead_engine.db in your environment).");
-  dbPath = process.env.NODE_ENV === "test" ? "./lead_engine_test.db" : "./lead_engine.db";
+  throw new Error("Postgres runtime is not implemented. Use a SQLite file path in DATABASE_URL.");
 }
 
 const resolvedPath = path.resolve(process.cwd(), dbPath);
