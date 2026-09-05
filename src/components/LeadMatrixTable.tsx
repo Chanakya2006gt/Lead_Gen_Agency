@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { Lead, HumanStatus } from "@/core/db/schema";
 import { ScoreGauge } from "./ScoreGauge";
 import { OpportunityCardGrid } from "./OpportunityCardGrid";
+import { OpportunityBadge } from "./OpportunityBadge";
 import {
   ExternalLink,
   Search,
@@ -84,39 +85,6 @@ export function LeadMatrixTable({
       });
   }, [leads, searchQuery, opportunityFilter, websiteFilter, sortBy]);
 
-  const renderOpportunityBadge = (lead: Lead) => {
-    if (lead.isGbpDisconnected) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
-          <Unlink className="w-3 h-3 text-purple-400" />
-          <span>Unlinked GBP Asset</span>
-        </span>
-      );
-    }
-    if (!lead.hasWebsite) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-          <XCircle className="w-3 h-3 text-amber-400" />
-          <span>No Website Gap</span>
-        </span>
-      );
-    }
-    if (lead.opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE") {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-          <Sparkles className="w-3 h-3 text-indigo-400" />
-          <span>Custom Ops Software</span>
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30">
-        <Smartphone className="w-3 h-3 text-blue-400" />
-        <span>Mobile / Booking Gap</span>
-      </span>
-    );
-  };
-
   return (
     <div className="space-y-3.5">
       {/* Search, Filter Pills & View Switcher Bar */}
@@ -130,6 +98,7 @@ export function LeadMatrixTable({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search opportunity, business..."
+              aria-label="Search opportunities and businesses"
               className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-100 text-xs focus:outline-none focus:border-indigo-400 transition font-sans"
             />
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
@@ -140,6 +109,7 @@ export function LeadMatrixTable({
             <button
               type="button"
               onClick={() => setOpportunityFilter("ALL")}
+              aria-label={`Show all ${counts.all} opportunities`}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
                 opportunityFilter === "ALL"
                   ? "bg-indigo-600 text-white font-bold shadow-sm"
@@ -147,12 +117,13 @@ export function LeadMatrixTable({
               }`}
             >
               <span>All</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-white/10 text-[10px]">{counts.all}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-white/10 text-[10px]">{counts.all}</span>
             </button>
 
             <button
               type="button"
               onClick={() => setOpportunityFilter("DISCONNECTED_GBP_WEBSITE")}
+              aria-label={`Show ${counts.unlinked} unlinked GBP assets`}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
                 opportunityFilter === "DISCONNECTED_GBP_WEBSITE"
                   ? "bg-purple-600 text-white font-bold shadow-sm"
@@ -161,12 +132,13 @@ export function LeadMatrixTable({
             >
               <Unlink className="w-3 h-3" />
               <span>Unlinked GBP</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-purple-500/20 text-[10px]">{counts.unlinked}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-purple-500/20 text-[10px]">{counts.unlinked}</span>
             </button>
 
             <button
               type="button"
               onClick={() => setOpportunityFilter("WEBSITE")}
+              aria-label={`Show ${counts.noWebsite} businesses without website`}
               className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
                 opportunityFilter === "WEBSITE"
                   ? "bg-amber-600 text-white font-bold shadow-sm"
@@ -175,13 +147,14 @@ export function LeadMatrixTable({
             >
               <XCircle className="w-3 h-3" />
               <span>No Website</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-[10px]">{counts.noWebsite}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-[10px]">{counts.noWebsite}</span>
             </button>
 
             {counts.mobileGap > 0 && (
               <button
                 type="button"
                 onClick={() => setOpportunityFilter("MOBILE_GAP")}
+                aria-label={`Show ${counts.mobileGap} businesses with mobile layout gaps`}
                 className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
                   opportunityFilter === "MOBILE_GAP"
                     ? "bg-blue-600 text-white font-bold shadow-sm"
@@ -190,7 +163,7 @@ export function LeadMatrixTable({
               >
                 <Smartphone className="w-3 h-3" />
                 <span>Mobile Gap</span>
-                <span className="px-1.5 py-0.2 rounded-full bg-blue-500/20 text-[10px]">{counts.mobileGap}</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-[10px]">{counts.mobileGap}</span>
               </button>
             )}
           </div>
@@ -203,6 +176,7 @@ export function LeadMatrixTable({
             data-testid="filter-website"
             value={websiteFilter}
             onChange={(e) => setWebsiteFilter(e.target.value)}
+            aria-label="Filter by website connection status"
             className="px-2.5 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono"
           >
             <option value="ALL">All Web States</option>
@@ -216,6 +190,7 @@ export function LeadMatrixTable({
             data-testid="select-sort"
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
+            aria-label="Sort leads"
             className="px-2.5 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono font-medium"
           >
             <option value="score">Sort: Lead Score</option>
@@ -273,13 +248,13 @@ export function LeadMatrixTable({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-white/[0.08] bg-[#0A0D14] text-slate-400 font-mono text-[11px]">
-                    <th className="py-3 px-4 text-center w-16">Score</th>
-                    <th className="py-3 px-4">Opportunity Angle</th>
-                    <th className="py-3 px-4">Business Entity</th>
-                    <th className="py-3 px-4">Reputation &amp; Demand</th>
-                    <th className="py-3 px-4">Technical Evidence</th>
-                    <th className="py-3 px-4">Stage</th>
-                    <th className="py-3 px-4 text-right">Action</th>
+                    <th scope="col" className="py-3 px-4 text-center w-16">Score</th>
+                    <th scope="col" className="py-3 px-4">Opportunity Angle</th>
+                    <th scope="col" className="py-3 px-4">Business Entity</th>
+                    <th scope="col" className="py-3 px-4">Reputation &amp; Demand</th>
+                    <th scope="col" className="py-3 px-4">Technical Evidence</th>
+                    <th scope="col" className="py-3 px-4">Stage</th>
+                    <th scope="col" className="py-3 px-4 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.04]">
@@ -291,8 +266,16 @@ export function LeadMatrixTable({
                     return (
                       <tr
                         key={lead.id}
+                        tabIndex={0}
+                        role="row"
                         onClick={() => onSelectLead(lead)}
-                        className={`hover:bg-white/[0.03] transition-all duration-200 cursor-pointer ${
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onSelectLead(lead);
+                          }
+                        }}
+                        className={`hover:bg-white/[0.03] focus:bg-white/[0.04] focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all duration-200 cursor-pointer ${
                           isSelected ? "bg-indigo-950/30 border-l-2 border-indigo-500" : ""
                         }`}
                       >
@@ -303,7 +286,7 @@ export function LeadMatrixTable({
 
                         {/* 2. Primary Opportunity Angle */}
                         <td className="py-3.5 px-4">
-                          {renderOpportunityBadge(lead)}
+                          <OpportunityBadge lead={lead} />
                           <span className="text-[11px] text-slate-400 block mt-1 line-clamp-1">
                             {lead.dossier?.recommendedPitch?.coreAngle || "Digital infrastructure upgrade"}
                           </span>
@@ -318,7 +301,7 @@ export function LeadMatrixTable({
                             {lead.category && <span>{lead.category}</span>}
                             {lead.category && lead.formattedAddress && <span className="text-slate-600">·</span>}
                             {lead.formattedAddress && (
-                              <span className="truncate max-w-[200px] text-slate-500">
+                              <span className="truncate max-w-[200px] text-slate-400">
                                 {lead.formattedAddress}
                               </span>
                             )}
@@ -338,17 +321,17 @@ export function LeadMatrixTable({
                                   +{lead.reviewCountDelta} gained
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-slate-500 block mt-0.5">
+                                <span className="text-[10px] text-slate-400 block mt-0.5">
                                   Velocity: {lead.reviewTrend}
                                 </span>
                               )}
                             </>
                           ) : (
                             <div className="text-[11px] font-mono">
-                              <span className="px-2 py-0.5 rounded bg-slate-800/70 border border-white/[0.08] text-slate-400 text-[10px]">
+                              <span className="px-2 py-0.5 rounded bg-slate-800/70 border border-white/[0.08] text-slate-300 text-[10px]">
                                 Unverified Google
                               </span>
-                              <span className="text-[10px] text-slate-500 block mt-1">Direct Web Audit</span>
+                              <span className="text-[10px] text-slate-400 block mt-1">Direct Web Audit</span>
                             </div>
                           )}
                         </td>
@@ -385,24 +368,24 @@ export function LeadMatrixTable({
                                 >
                                   {displayDomain}
                                 </a>
-                                <ExternalLink className="w-3 h-3 text-slate-500" />
+                                <ExternalLink className="w-3 h-3 text-slate-400" />
                               </div>
 
                               {/* Quick Audit Badges */}
                               {telemetry && (
                                 <div className="flex flex-wrap gap-1 text-[10px]">
                                   {!telemetry.viewportMetaPresent && (
-                                    <span className="px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                                    <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
                                       Desktop Only
                                     </span>
                                   )}
                                   {!telemetry.hasSsl && (
-                                    <span className="px-1.5 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
+                                    <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">
                                       No SSL
                                     </span>
                                   )}
                                   {telemetry.hasWhatsAppDirectLink && (
-                                    <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                                       WhatsApp
                                     </span>
                                   )}
@@ -425,7 +408,7 @@ export function LeadMatrixTable({
                                 : lead.humanStatus === "REVIEWED"
                                 ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
                                 : lead.humanStatus === "ARCHIVED"
-                                ? "bg-slate-800 text-slate-500"
+                                ? "bg-slate-800 text-slate-400"
                                 : "bg-white/[0.04] text-slate-300 border border-white/[0.08]"
                             }`}
                           >
@@ -436,10 +419,12 @@ export function LeadMatrixTable({
                         {/* 7. Action CTA */}
                         <td className="py-3.5 px-4 text-right">
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               onSelectLead(lead);
                             }}
+                            aria-label={`Inspect ${lead.name}`}
                             className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/[0.04] hover:bg-indigo-600 hover:text-white border border-white/[0.08] text-slate-300 text-xs font-medium transition cursor-pointer active:scale-[0.98]"
                           >
                             <span>Inspect</span>

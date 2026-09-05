@@ -8,10 +8,10 @@ interface ScoreGaugeProps {
 
 export function ScoreGauge({ score, label, size = "md" }: ScoreGaugeProps) {
   let colorStyle = "text-emerald-400 bg-emerald-500/10 border-emerald-500/30";
-  if (score < 50) {
+  if (score < 60) {
     colorStyle = "text-slate-400 bg-slate-800/40 border-slate-700/50";
-  } else if (score < 75) {
-    colorStyle = "text-amber-400 bg-amber-500/10 border-amber-500/30";
+  } else if (score < 80) {
+    colorStyle = "text-indigo-400 bg-indigo-500/10 border-indigo-500/30";
   }
 
   const sizeClasses = {

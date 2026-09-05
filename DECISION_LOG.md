@@ -198,3 +198,47 @@ Commands executed:
 - `npm test` — **131 tests passed** across **27 test suites** (100% green).
 - `DATABASE_URL=./lead_engine.db npm run build` — Clean production Next.js build.
 - `npm run test:e2e` — 3 Playwright browser e2e tests passed (routes: `/`, `/api/scans`, `/api/audit/direct`, `/api/discovery/suggestions`, `/api/leads/export`).
+
+---
+
+## [AD-038] UI Audit Remediation, Radix Accessibility, Atmospheric Wallpaper, and Outreach Copy Honesty Alignment
+
+- **Date**: 2026-09-05
+- **Status**: Implemented & Verified
+- **Driver**: UI Audit (`UI_AUDIT.md`) and User Aesthetic & Honesty Mandate.
+
+### Context & Problem
+1. **Design Divergence**: The previous UI implementation drifted from `DESIGN.md`, missing Geist font loading, displaying outdated version numbers (`v2.4 Production`), and lacking unified badge components.
+2. **Fabricated ROI Outreach Claims**: WhatsApp copy contained ungrounded commercial claims (*"captures 15-25 more client inquiries a month"*), violating core honesty standards.
+3. **Modal & Drawer Accessibility**: Slide-over drawer and confirmation dialogs relied on ad-hoc DOM overlays without proper ARIA dialog semantics, focus trapping, or keyboard `Escape` handlers.
+4. **Atmospheric Wallpaper Preservation**: The custom wallpaper (`/assets/hero-bg.jpg`) required seamless integration with HUD glass card surfaces while strictly preserving WCAG 2.2 AA contrast ratios ($\ge 4.5:1$).
+
+### Key Architectural Changes & Decisions
+
+1. **Atmospheric Wallpaper Layer & Translucent Glass HUD**:
+   - Anchored `/assets/hero-bg.jpg` via `next/image` with subtle cinematic rim glow and ambient radial vignette.
+   - Refactored `.card-surface` in `src/app/globals.css` to use high-clarity translucent background (`bg-[#0D111A]/85` with `backdrop-blur-md` and `border-white/[0.08]`), ensuring high readability while showcasing the underlying aesthetic wallpaper.
+
+2. **Grounded & Model-Aware Outreach Copy**:
+   - Completely purged fabricated inquiries/ROI claims from `LeadInspectorDrawer.tsx`.
+   - WhatsApp outreach copy dynamically branches on `relevantWorkflows` (e.g. appointment booking vs mobile layout repair) and focuses strictly on empirical observations and high-intent local search visibility.
+   - Replaced hardcoded agency/founder strings with configurable environment variables (`NEXT_PUBLIC_AGENCY_FOUNDER_NAME` / `NEXT_PUBLIC_AGENCY_NAME`) with clean generic fallbacks.
+
+3. **Radix-Powered Accessible Dialogs & Drawers**:
+   - Replaced custom drawer overlays with `@radix-ui/react-dialog` (`Dialog.Root`, `Dialog.Portal`, `Dialog.Overlay`, `Dialog.Content`, `Dialog.Title`).
+   - Integrated Radix confirmation dialogs for individual scan deletions and destructive clear-all actions (`DESTROY_ALL` text gate).
+   - Added `th scope="col"` for semantic data tables and interactive keyboard navigation (`tabIndex={0}`, `Enter`/`Space` handlers) on table rows, market tabs, and opportunity cards.
+
+4. **Component Architecture & Design System Alignment**:
+   - Created `src/components/OpportunityBadge.tsx` to unify semantic color coding and icons across table and card grid views.
+   - Loaded official `Geist` and `Geist_Mono` typography via `next/font/google` in `src/app/layout.tsx`.
+   - Reconciled `DESIGN.md` component mappings, version chips (`v1.0.0 (Workstation)`), score gauge palette thresholds ($\ge 80$ Emerald, $60–79$ Indigo, $<60$ Slate), and global shortcut specifications (`Cmd+K` / `Ctrl+K` focusing discovery launcher `#discovery-niche-input`).
+
+### Empirical Verification & Audit Log
+
+Exact commands run and verified:
+- `npm run lint` (`tsc --noEmit`): Clean (0 errors).
+- `DATABASE_URL=./lead_engine.db npm run build`: Clean Next.js 15 production build with optimized static routes and shared bundles.
+- `npm test`: **131 passed** across **27 test suites**.
+- `npm run test:e2e`: **3 passed** across all routes (`/`, `/api/scans`, `/api/audit/direct`, `/api/discovery/suggestions`, `/api/leads/export`).
+

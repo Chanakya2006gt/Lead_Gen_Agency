@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   X,
   Copy,
@@ -26,168 +27,166 @@ interface LeadInspectorDrawerProps {
   lead: Lead | null;
   onClose: () => void;
   onStatusChange?: (leadId: string, status: any) => Promise<void>;
-  onUpdateStatus?: (leadId: string, status: string) => Promise<void>;
 }
 
 export function LeadInspectorDrawer({
   lead,
   onClose,
   onStatusChange,
-  onUpdateStatus,
 }: LeadInspectorDrawerProps) {
   const [activeTab, setActiveTab] = useState<"whatsapp" | "email" | "phone" | "scope">("whatsapp");
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
-  if (!lead) return null;
+  const founderName = process.env.NEXT_PUBLIC_AGENCY_FOUNDER_NAME || "Your Name";
+  const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME || "Your Agency";
 
-  const dossier = (lead.dossier as any) || {};
-  const pitch = dossier.recommendedPitch || {};
-  const commercial = dossier.commercialProfile;
-  const telemetry = lead.auditTelemetry;
+  const derivedData = useMemo(() => {
+    if (!lead) return null;
 
-  const founderName = process.env.NEXT_PUBLIC_AGENCY_FOUNDER_NAME || "Chanakya";
-  const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME || "Agency Growth Partners";
-  const cleanPhone = (lead.phone || "").replace(/[^0-9+]/g, "");
+    const dossier = (lead.dossier as any) || {};
+    const pitch = dossier.recommendedPitch || {};
+    const commercial = dossier.commercialProfile;
+    const telemetry = lead.auditTelemetry;
+    const cleanPhone = (lead.phone || "").replace(/[^0-9+]/g, "");
 
-  const displayDomain = lead.unlinkedWebsiteUrl
-    ? lead.unlinkedWebsiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
-    : lead.websiteUrl
-    ? lead.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
-    : "No Website";
+    const displayDomain = lead.unlinkedWebsiteUrl
+      ? lead.unlinkedWebsiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
+      : lead.websiteUrl
+      ? lead.websiteUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")
+      : "No Website";
 
-  // Dynamic INR / USD Formatting
-  const buildOffer = commercial?.recommendedBuildOffer;
-  const careOffer = commercial?.recommendedMonthlyCare;
-  const isINR = buildOffer?.currency === "INR";
-  const curSym = isINR ? "₹" : "$";
+    // Dynamic INR / USD Formatting
+    const buildOffer = commercial?.recommendedBuildOffer;
+    const careOffer = commercial?.recommendedMonthlyCare;
+    const isINR = buildOffer?.currency === "INR";
+    const curSym = isINR ? "₹" : "$";
 
-  const displayEstimatedValue = buildOffer && careOffer
-    ? `${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")} – ${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} Build + ${curSym}${careOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${careOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")}/mo (${commercial.feasibleOfferWindow.status === "DOWN_SCOPED" ? "Lean MVP" : "Market Fit"})`
-    : pitch?.estimatedValueRange || `${curSym}18,000 – ${curSym}35,000`;
+    const displayEstimatedValue = buildOffer && careOffer
+      ? `${curSym}${buildOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")} – ${curSym}${buildOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")} Build + ${curSym}${careOffer.min.toLocaleString(isINR ? "en-IN" : "en-US")}–${curSym}${careOffer.max.toLocaleString(isINR ? "en-IN" : "en-US")}/mo (${commercial.feasibleOfferWindow.status === "DOWN_SCOPED" ? "Lean MVP" : "Market Fit"})`
+      : pitch?.estimatedValueRange || `${curSym}18,000 – ${curSym}35,000`;
 
-  // Establish Typed Google Evidence Status
-  const isGoogleVerified =
-    typeof lead.rating === "number" &&
-    lead.rating !== null &&
-    typeof lead.reviewCount === "number" &&
-    lead.reviewCount !== null;
+    // Establish Typed Google Evidence Status
+    const isGoogleVerified =
+      typeof lead.rating === "number" &&
+      lead.rating !== null &&
+      typeof lead.reviewCount === "number" &&
+      lead.reviewCount !== null;
 
-  const googleEvidence = dossier.googleEvidence || (
-    isGoogleVerified
-      ? {
-          status: "VERIFIED" as const,
-          placeId: lead.placeId,
-          googleMapsUrl: lead.googleMapsUrl || "",
-          rating: lead.rating,
-          reviewCount: lead.reviewCount,
-          source: "GOOGLE_PLACES" as const,
-          retrievedAt: lead.createdAt,
-        }
-      : {
-          status: "NOT_VERIFIED" as const,
-          placeId: null,
-          googleMapsUrl: null,
-          rating: null,
-          reviewCount: null,
-          source: "NONE" as const,
-        }
-  );
+    const googleEvidence = dossier.googleEvidence || (
+      isGoogleVerified
+        ? {
+            status: "VERIFIED" as const,
+            placeId: lead.placeId,
+            googleMapsUrl: lead.googleMapsUrl || "",
+            rating: lead.rating,
+            reviewCount: lead.reviewCount,
+            source: "GOOGLE_PLACES" as const,
+            retrievedAt: lead.createdAt,
+          }
+        : {
+            status: "NOT_VERIFIED" as const,
+            placeId: null,
+            googleMapsUrl: null,
+            rating: null,
+            reviewCount: null,
+            source: "NONE" as const,
+          }
+    );
 
-  // Establish Business Model Context & Workflow Relevance
-  const classification = BusinessModelClassifier.classify({
-    name: lead.name,
-    category: lead.category,
-    domain: displayDomain,
-    findings: telemetry?.findings || [],
-  });
-  const { model, relevantWorkflows } = classification;
+    // Establish Business Model Context & Workflow Relevance
+    const classification = BusinessModelClassifier.classify({
+      name: lead.name,
+      category: lead.category,
+      domain: displayDomain,
+      findings: telemetry?.findings || [],
+    });
+    const { model, relevantWorkflows } = classification;
 
-  // 1. Evidence-Backed Why Points (Strictly Filtered by Business Model Workflow Relevance)
-  const rawWhyPoints: string[] = [];
-  if (lead.isGbpDisconnected && lead.unlinkedWebsiteUrl && relevantWorkflows.localGbpSync) {
-    rawWhyPoints.push(`Official website (${displayDomain}) exists online but is disconnected from Google Maps profile, suppressing 3-pack local search rankings.`);
-    rawWhyPoints.push("High-intent mobile searchers looking up your Google Maps profile cannot access treatments or book online.");
-  } else if (!lead.hasWebsite) {
-    rawWhyPoints.push("Zero official website linked on Google Maps—leaking high-intent mobile searchers to competitors.");
-    rawWhyPoints.push("Lacks direct digital intake, forcing all potential clients to call during business hours only.");
-  } else {
-    if (telemetry && !telemetry.viewportMetaPresent) {
-      rawWhyPoints.push("Mobile layout is desktop-only and unoptimized for touch smartphone users.");
+    // 1. Evidence-Backed Why Points (Strictly Filtered by Business Model Workflow Relevance)
+    const rawWhyPoints: string[] = [];
+    if (lead.isGbpDisconnected && lead.unlinkedWebsiteUrl && relevantWorkflows.localGbpSync) {
+      rawWhyPoints.push(`Official website (${displayDomain}) exists online but is disconnected from Google Maps profile, suppressing 3-pack local search rankings.`);
+      rawWhyPoints.push("High-intent mobile searchers looking up your Google Maps profile cannot access treatments or book online.");
+    } else if (!lead.hasWebsite) {
+      rawWhyPoints.push("Zero official website linked on Google Maps—leaking high-intent mobile searchers to competitors.");
+      rawWhyPoints.push("Lacks direct digital intake, forcing all potential clients to call during business hours only.");
+    } else {
+      if (telemetry && !telemetry.viewportMetaPresent) {
+        rawWhyPoints.push("Mobile layout is desktop-only and unoptimized for touch smartphone users.");
+      }
+      if (telemetry && telemetry.hasHorizontalOverflow) {
+        rawWhyPoints.push("Horizontal layout overflow disrupts mobile navigation on smartphone screens.");
+      }
+      if (relevantWorkflows.whatsAppIntake && telemetry && !telemetry.hasDirectClickToCall && !telemetry.hasWhatsAppDirectLink) {
+        rawWhyPoints.push("Missing direct 1-tap call or WhatsApp conversion trigger for mobile traffic.");
+      }
+      if (relevantWorkflows.appointmentBooking && telemetry && !telemetry.hasInteractiveBookingForm) {
+        rawWhyPoints.push("Missing automated online calendar booking or scheduling intake funnel.");
+      }
+      if (telemetry && !telemetry.hasSsl) {
+        rawWhyPoints.push("Security Warning: Insecure HTTP protocol without SSL certificate.");
+      }
+      if (telemetry && telemetry.initialLoadLatencyMs > 2500) {
+        rawWhyPoints.push(`Slow initial load latency (${telemetry.initialLoadLatencyMs}ms)—hurting search rankings.`);
+      }
+      if (rawWhyPoints.length === 0 && telemetry?.findings && telemetry.findings.length > 0) {
+        rawWhyPoints.push(telemetry.findings[0].evidence);
+      }
     }
-    if (telemetry && telemetry.hasHorizontalOverflow) {
-      rawWhyPoints.push("Horizontal layout overflow disrupts mobile navigation on smartphone screens.");
-    }
-    // Only push WhatsApp if relevant to the business model (e.g. Clinics, Salons, Restaurants)
-    if (relevantWorkflows.whatsAppIntake && telemetry && !telemetry.hasDirectClickToCall && !telemetry.hasWhatsAppDirectLink) {
-      rawWhyPoints.push("Missing direct 1-tap call or WhatsApp conversion trigger for mobile traffic.");
-    }
-    // Only push Booking Form if relevant to the business model (e.g. Clinics, Spas, Law practices)
-    if (relevantWorkflows.appointmentBooking && telemetry && !telemetry.hasInteractiveBookingForm) {
-      rawWhyPoints.push("Missing automated online calendar booking or scheduling intake funnel.");
-    }
-    if (telemetry && !telemetry.hasSsl) {
-      rawWhyPoints.push("Security Warning: Insecure HTTP protocol without SSL certificate.");
-    }
-    if (telemetry && telemetry.initialLoadLatencyMs > 2500) {
-      rawWhyPoints.push(`Slow initial load latency (${telemetry.initialLoadLatencyMs}ms)—hurting search rankings.`);
-    }
-    if (rawWhyPoints.length === 0 && telemetry?.findings && telemetry.findings.length > 0) {
-      rawWhyPoints.push(telemetry.findings[0].evidence);
-    }
-  }
 
-  if (isGoogleVerified) {
-    rawWhyPoints.push(`Strong established reputation: ${lead.rating!.toFixed(1)}★ rating across ${lead.reviewCount} verified reviews demonstrates customer demand.`);
-  } else {
-    rawWhyPoints.push(`Direct web infrastructure audit: Comprehensive empirical UX & speed audit completed.`);
-  }
+    if (isGoogleVerified) {
+      rawWhyPoints.push(`Strong established reputation: ${lead.rating!.toFixed(1)}★ rating across ${lead.reviewCount} verified reviews demonstrates customer demand.`);
+    } else {
+      rawWhyPoints.push(`Direct web infrastructure audit: Comprehensive empirical UX & speed audit completed.`);
+    }
 
-  // 2. Draft Outreach Copy (Model & Workflow Aware)
-  const draftWhatsapp = isGoogleVerified && relevantWorkflows.whatsAppIntake
-    ? `Hi team ${lead.name}, I was reviewing your Google Maps listing (${lead.rating!.toFixed(1)}★, ${lead.reviewCount} reviews) and noticed ${
-        lead.isGbpDisconnected
-          ? `your official website (${displayDomain}) isn't connected to your Maps profile, dropping your 3-pack patient rank.`
-          : !lead.hasWebsite
-          ? "you don't have a direct website/WhatsApp booking link on Maps for mobile visitors."
-          : "your mobile site has horizontal layout overflow that makes booking from phones difficult."
-      }\n\nI put together a 2-minute video breakdown of how fixing this captures 15-25 more client inquiries a month. Can I share it here?\n\nBest,\n${founderName}`
-    : model === "B2B_SAAS_TECH"
-    ? `Hi team ${lead.name}, I was analyzing ${displayDomain} and noticed opportunities to streamline your mobile onboarding and product conversion funnel.\n\nI put together a 2-minute video walkthrough showing how fixing this improves sign-up velocity. Can I share it here?\n\nBest,\n${founderName}`
-    : model === "B2B_INDUSTRIAL_MANUFACTURING"
-    ? `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed opportunities to modernize your digital product catalog and Request-for-Quote (RFQ) pipeline.\n\nI put together a 2-minute video breakdown showing how this captures more buyer inquiries. Can I share it here?\n\nBest,\n${founderName}`
-    : model === "ECOMMERCE_D2C"
-    ? `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed opportunities to accelerate mobile checkout and storefront navigation.\n\nI put together a 2-minute video breakdown showing how this boosts conversion rates. Can I share it here?\n\nBest,\n${founderName}`
-    : `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed ${
-        telemetry && !telemetry.viewportMetaPresent
-          ? "your mobile site has desktop layout overflow that makes navigation difficult from phones."
-          : telemetry && !telemetry.hasSsl
-          ? "your domain lacks an active SSL security certificate, triggering browser trust warnings."
-          : "opportunities to optimize your mobile responsive layout and page load performance."
-      }\n\nI put together a 2-minute video breakdown of how resolving this improves visitor conversion. Can I share it here?\n\nBest,\n${founderName}`;
+    // 2. Draft Outreach Copy (Model & Workflow Aware, Zero Fabricated ROI Claims)
+    const bookingOrMobile = relevantWorkflows.appointmentBooking ? "booking" : "mobile";
+    const draftWhatsapp = isGoogleVerified && relevantWorkflows.whatsAppIntake
+      ? `Hi team ${lead.name}, I was reviewing your Google Maps listing (${lead.rating!.toFixed(1)}★, ${lead.reviewCount} reviews) and noticed ${
+          lead.isGbpDisconnected
+            ? `your official website (${displayDomain}) isn't connected to your Maps profile, dropping your 3-pack patient rank.`
+            : !lead.hasWebsite
+            ? "you don't have a direct website or booking channel on Maps for mobile visitors."
+            : "your mobile site has horizontal layout overflow that makes navigation difficult from phones."
+        }\n\nI put together a 2-minute video breakdown of the ${bookingOrMobile}/layout issue on this listing. Can I share it here?\n\nBest,\n${founderName}`
+      : model === "B2B_SAAS_TECH"
+      ? `Hi team ${lead.name}, I was analyzing ${displayDomain} and noticed opportunities to streamline your mobile onboarding and product conversion funnel.\n\nI put together a 2-minute video breakdown showing the observations. Can I share it here?\n\nBest,\n${founderName}`
+      : model === "B2B_INDUSTRIAL_MANUFACTURING"
+      ? `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed opportunities to modernize your digital product catalog and Request-for-Quote (RFQ) pipeline.\n\nI put together a 2-minute video breakdown showing the observations. Can I share it here?\n\nBest,\n${founderName}`
+      : model === "ECOMMERCE_D2C"
+      ? `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed opportunities to accelerate mobile checkout and storefront navigation.\n\nI put together a 2-minute video breakdown showing the observations. Can I share it here?\n\nBest,\n${founderName}`
+      : `Hi team ${lead.name}, I was reviewing ${displayDomain} and noticed ${
+          telemetry && !telemetry.viewportMetaPresent
+            ? "your mobile site has desktop layout overflow that makes navigation difficult from phones."
+            : telemetry && !telemetry.hasSsl
+            ? "your domain lacks an active SSL security certificate, triggering browser trust warnings."
+            : "opportunities to optimize your mobile responsive layout and page load performance."
+        }\n\nI put together a 2-minute video breakdown of the mobile/layout observations on this domain. Can I share it here?\n\nBest,\n${founderName}`;
 
-  const draftEmail = isGoogleVerified && relevantWorkflows.localGbpSync
-    ? `Subject: Question regarding ${lead.name}'s Google Maps listing\n\nHi ${lead.name} Team,\n\nI came across ${lead.name} while researching top-rated ${lead.category || "service providers"} in ${lead.formattedAddress || "your city"}—congratulations on maintaining a ${lead.rating!.toFixed(1)}★ rating across ${lead.reviewCount} reviews.\n\nWhile analyzing your local digital footprint, I spotted a significant commercial bottleneck:\n\n${rawWhyPoints.map((p) => `• ${p}`).join("\n")}\n\nWe specialize in fixing these exact conversion leaks for established ${lead.category || "businesses"} without disrupting ongoing operations.\n\nWould you be open to a brief 5-minute Loom walkthrough showing exactly how we can resolve this for ${lead.name}?\n\nBest regards,\n\n${founderName}\n${agencyName}`
-    : `Subject: Technical observation regarding ${displayDomain}\n\nHi ${lead.name} Team,\n\nI was analyzing ${displayDomain} and spotted a significant commercial bottleneck affecting mobile visitor conversions:\n\n${rawWhyPoints.map((p) => `• ${p}`).join("\n")}\n\nWe specialize in fixing these exact conversion leaks without disrupting ongoing operations.\n\nWould you be open to a brief 5-minute Loom walkthrough showing exactly how we can resolve this for ${lead.name}?\n\nBest regards,\n\n${founderName}\n${agencyName}`;
+    const draftEmail = isGoogleVerified && relevantWorkflows.localGbpSync
+      ? `Subject: Question regarding ${lead.name}'s Google Maps listing\n\nHi ${lead.name} Team,\n\nI came across ${lead.name} while researching top-rated ${lead.category || "service providers"} in ${lead.formattedAddress || "your city"}—congratulations on maintaining a ${lead.rating!.toFixed(1)}★ rating across ${lead.reviewCount} reviews.\n\nWhile analyzing your local digital footprint, I spotted a significant commercial bottleneck:\n\n${rawWhyPoints.map((p) => `• ${p}`).join("\n")}\n\nWe specialize in fixing these exact conversion leaks for established ${lead.category || "businesses"} without disrupting ongoing operations.\n\nWould you be open to a brief 5-minute Loom walkthrough showing exactly how we can resolve this for ${lead.name}?\n\nBest regards,\n\n${founderName}\n${agencyName}`
+      : `Subject: Technical observation regarding ${displayDomain}\n\nHi ${lead.name} Team,\n\nI was analyzing ${displayDomain} and spotted a significant commercial bottleneck affecting mobile visitor conversions:\n\n${rawWhyPoints.map((p) => `• ${p}`).join("\n")}\n\nWe specialize in fixing these exact conversion leaks without disrupting ongoing operations.\n\nWould you be open to a brief 5-minute Loom walkthrough showing exactly how we can resolve this for ${lead.name}?\n\nBest regards,\n\n${founderName}\n${agencyName}`;
 
-  const draftPhone = isGoogleVerified && relevantWorkflows.localGbpSync
-    ? `Front-Desk Script for ${lead.name}:\nOperator: "Hi, I was looking up ${lead.name} on Google Maps—congratulations on the ${lead.rating!.toFixed(1)}★ rating with ${lead.reviewCount} reviews! \n\nI noticed a technical issue with your online booking and mobile setup where patients/clients might have trouble scheduling directly from their phones. \n\nWho is the practice manager or owner responsible for your digital operations so I can send over a quick 2-minute screenshot breakdown for them?"`
-    : `Front-Desk Script for ${lead.name}:\nOperator: "Hi, I was reviewing ${displayDomain} and noticed a technical issue with your mobile layout where visitors have trouble navigating from their phones. \n\nWho is the manager or owner responsible for your website operations so I can send over a quick 2-minute screenshot breakdown for them?"`;
+    const draftPhone = isGoogleVerified && relevantWorkflows.localGbpSync
+      ? `Front-Desk Script for ${lead.name}:\nOperator: "Hi, I was looking up ${lead.name} on Google Maps—congratulations on the ${lead.rating!.toFixed(1)}★ rating with ${lead.reviewCount} reviews! \n\nI noticed a technical issue with your online booking and mobile setup where patients/clients might have trouble scheduling directly from their phones. \n\nWho is the practice manager or owner responsible for your digital operations so I can send over a quick 2-minute screenshot breakdown for them?"`
+      : `Front-Desk Script for ${lead.name}:\nOperator: "Hi, I was reviewing ${displayDomain} and noticed a technical issue with your mobile layout where visitors have trouble navigating from their phones. \n\nWho is the manager or owner responsible for your website operations so I can send over a quick 2-minute screenshot breakdown for them?"`;
 
-  // 3. Domain-Level Outreach Claim Validation
-  const validatedOutreach = OutreachClaimValidator.validate({
-    name: lead.name,
-    category: lead.category,
-    domain: displayDomain,
-    googleEvidence,
-    coreAngle: pitch?.coreAngle || "Digital Infrastructure",
-    whatsappCopy: draftWhatsapp,
-    coldEmailCopy: draftEmail,
-    phoneScript: draftPhone,
-    whyPoints: rawWhyPoints,
-  });
+    // 3. Domain-Level Outreach Claim Validation
+    const validatedOutreach = OutreachClaimValidator.validate({
+      name: lead.name,
+      category: lead.category,
+      domain: displayDomain,
+      googleEvidence,
+      coreAngle: pitch?.coreAngle || "Digital Infrastructure",
+      whatsappCopy: draftWhatsapp,
+      coldEmailCopy: draftEmail,
+      phoneScript: draftPhone,
+      whyPoints: rawWhyPoints,
+    });
 
-  const scopeCopy = `[PROPOSED TECHNICAL SCOPE & DELIVERABLES]
+    const scopeCopy = `[PROPOSED TECHNICAL SCOPE & DELIVERABLES]
 Project: ${lead.name} — ${pitch?.coreAngle || "Digital Architecture"}
 Target Scope Benchmark: ${displayEstimatedValue}
 
@@ -197,6 +196,49 @@ Deliverables:
 • Mobile-First Speed Optimization (<1.5s TTFB)
 • Direct Click-to-Call & WhatsApp Intake Funnel
 • Interactive Booking / Calendar Integration`;
+
+    return {
+      dossier,
+      pitch,
+      commercial,
+      buildOffer,
+      careOffer,
+      isINR,
+      curSym,
+      telemetry,
+      cleanPhone,
+      displayDomain,
+      displayEstimatedValue,
+      isGoogleVerified,
+      googleEvidence,
+      classification,
+      rawWhyPoints,
+      validatedOutreach,
+      scopeCopy,
+    };
+  }, [lead, founderName, agencyName]);
+
+  if (!lead || !derivedData) return null;
+
+  const {
+    dossier,
+    pitch,
+    commercial,
+    buildOffer,
+    careOffer,
+    isINR,
+    curSym,
+    telemetry,
+    cleanPhone,
+    displayDomain,
+    displayEstimatedValue,
+    isGoogleVerified,
+    googleEvidence,
+    classification,
+    rawWhyPoints,
+    validatedOutreach,
+    scopeCopy,
+  } = derivedData;
 
   const getActiveCopyText = () => {
     switch (activeTab) {
@@ -218,73 +260,85 @@ Deliverables:
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-xl bg-[#0D111A] border-l border-white/[0.08] flex flex-col h-full shadow-2xl animate-in slide-in-from-right duration-250">
-        {/* Drawer Header */}
-        <div className="p-6 border-b border-white/[0.08] flex items-start justify-between gap-4 bg-[#0A0D14]">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <h2 className="text-base font-bold text-white font-sans">{lead.name}</h2>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                {lead.category || "Operating Business"}
-              </span>
-              {dossier?.disposition && (
-                <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
-                    dossier.disposition === "PURSUE"
-                      ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-                      : dossier.disposition === "NOT_A_FIT"
-                      ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
-                      : dossier.disposition === "INSUFFICIENT_EVIDENCE"
-                      ? "bg-slate-500/10 text-slate-300 border-slate-500/30"
-                      : "bg-amber-500/10 text-amber-300 border-amber-500/30"
-                  }`}
-                >
-                  {dossier.disposition.replace(/_/g, " ")}
-                </span>
-              )}
-              {dossier?.categorySource && (
-                <span
-                  className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-medium border ${
-                    dossier.categorySource === "GOOGLE_VERIFIED"
-                      ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+    <Dialog.Root open={!!lead} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed top-0 left-0 w-full h-full z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          className="fixed inset-0 z-50 flex justify-end pointer-events-none focus:outline-none"
+        >
+          <div className="w-full max-w-xl bg-[#0D111A] border-l border-white/[0.08] flex flex-col h-full shadow-2xl animate-in slide-in-from-right duration-250 pointer-events-auto">
+            <Dialog.Title className="sr-only">
+              Lead Dossier: {lead.name}
+            </Dialog.Title>
+
+            {/* Drawer Header */}
+            <div className="p-6 border-b border-white/[0.08] flex items-start justify-between bg-[#0A0D14] shrink-0">
+            <div className="space-y-1.5 max-w-[80%]">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-bold text-white tracking-tight">{lead.name}</h2>
+                {lead.category && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-800 text-slate-300 border border-white/[0.08]">
+                    {lead.category}
+                  </span>
+                )}
+                {dossier?.disposition && (
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                      dossier.disposition === "PURSUE"
+                        ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                        : dossier.disposition === "NOT_A_FIT"
+                        ? "bg-rose-500/10 text-rose-300 border-rose-500/30"
+                        : dossier.disposition === "INSUFFICIENT_EVIDENCE"
+                        ? "bg-slate-500/10 text-slate-300 border-slate-500/30"
+                        : "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                    }`}
+                  >
+                    {dossier.disposition.replace(/_/g, " ")}
+                  </span>
+                )}
+                {dossier?.categorySource && (
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-medium border ${
+                      dossier.categorySource === "GOOGLE_VERIFIED"
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        : dossier.categorySource === "GOOGLE_MAPS_DOM"
+                        ? "bg-sky-500/10 text-sky-400 border-sky-500/20"
+                        : dossier.categorySource === "WEBSITE_META"
+                        ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                        : "bg-slate-500/10 text-slate-400 border-slate-500/20"
+                    }`}
+                  >
+                    {dossier.categorySource === "GOOGLE_VERIFIED"
+                      ? "Google Verified"
                       : dossier.categorySource === "GOOGLE_MAPS_DOM"
-                      ? "bg-sky-500/10 text-sky-400 border-sky-500/20"
+                      ? "Maps DOM"
                       : dossier.categorySource === "WEBSITE_META"
-                      ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
-                      : "bg-slate-500/10 text-slate-400 border-slate-500/20"
-                  }`}
-                >
-                  {dossier.categorySource === "GOOGLE_VERIFIED"
-                    ? "Google Verified"
-                    : dossier.categorySource === "GOOGLE_MAPS_DOM"
-                    ? "Maps DOM"
-                    : dossier.categorySource === "WEBSITE_META"
-                    ? "Website Detected"
-                    : "User Specified"}
-                </span>
-              )}
-              {lead.isGbpDisconnected ? (
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1">
-                  <Unlink className="w-2.5 h-2.5" /> Disconnected GBP
-                </span>
-              ) : !lead.hasWebsite ? (
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  Zero Website
-                </span>
-              ) : (
-                <a
-                  href={lead.websiteUrl || "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-mono text-indigo-300 hover:text-indigo-200 border border-white/[0.08] bg-white/[0.03]"
-                >
-                  <Globe className="w-3 h-3" />
-                  <span>{displayDomain}</span>
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              )}
-            </div>
+                      ? "Website Detected"
+                      : "User Specified"}
+                  </span>
+                )}
+                {lead.isGbpDisconnected ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center gap-1">
+                    <Unlink className="w-2.5 h-2.5" /> Disconnected GBP
+                  </span>
+                ) : !lead.hasWebsite ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    Zero Website
+                  </span>
+                ) : (
+                  <a
+                    href={lead.websiteUrl || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-mono text-indigo-300 hover:text-indigo-200 border border-white/[0.08] bg-white/[0.03]"
+                  >
+                    <Globe className="w-3 h-3" />
+                    <span>{displayDomain}</span>
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </div>
 
             {/* Discovery Query & Provenance Context */}
             {dossier?.discoveryNiche && (
@@ -570,11 +624,10 @@ Deliverables:
               value={lead.humanStatus}
               disabled={isUpdatingStatus}
               onChange={async (e) => {
-                const handler = onStatusChange || onUpdateStatus;
-                if (handler) {
+                if (onStatusChange) {
                   setIsUpdatingStatus(true);
                   try {
-                    await handler(lead.id, e.target.value);
+                    await onStatusChange(lead.id, e.target.value as any);
                   } finally {
                     setIsUpdatingStatus(false);
                   }
@@ -610,6 +663,8 @@ Deliverables:
           </div>
         </div>
       </div>
-    </div>
+    </Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
   );
 }

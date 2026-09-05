@@ -37,7 +37,7 @@ export function Header({
                 LEAD ENGINE
               </h1>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-white/[0.04] text-slate-300 border border-white/[0.06]">
-                v2.4
+                v1.0.0 (Workstation)
               </span>
             </div>
             <p className="text-[11px] text-slate-400">
@@ -68,7 +68,9 @@ export function Header({
           </div>
 
           <button
+            type="button"
             onClick={handleExportCsv}
+            aria-label="Export Leads to CSV"
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] text-slate-300 text-xs font-medium transition cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-slate-400" />

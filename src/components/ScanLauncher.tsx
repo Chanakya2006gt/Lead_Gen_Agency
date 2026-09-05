@@ -40,7 +40,7 @@ function getInitialCityFromTimezone(): string {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
     if (tz.includes("Kolkata") || tz.includes("Calcutta") || tz.includes("India")) {
-      return "Warangal, Telangana, India";
+      return "Mumbai, Maharashtra, India";
     }
     if (tz.includes("Chicago") || tz.includes("Central")) {
       return "Dallas, TX, USA";
@@ -58,7 +58,7 @@ function getInitialCityFromTimezone(): string {
       return "Dubai, UAE";
     }
   } catch {}
-  return "Warangal, Telangana, India";
+  return "New York, NY, USA";
 }
 
 export function ScanLauncher({
@@ -409,11 +409,12 @@ export function ScanLauncher({
             className="grid grid-cols-1 md:grid-cols-12 gap-3"
           >
             {/* Niche Input */}
-            <div className="md:col-span-4">
-              <label className="block text-[11px] text-slate-400 font-medium mb-1">
+            <div className="md:col-span-3">
+              <label htmlFor="discovery-niche-input" className="block text-[11px] text-slate-400 font-medium mb-1">
                 Target Industry / Niche
               </label>
               <input
+                id="discovery-niche-input"
                 type="text"
                 value={niche}
                 onChange={(e) => setNiche(e.target.value)}
@@ -455,7 +456,12 @@ export function ScanLauncher({
                     setIsFocused(true);
                     if (predictions.length > 0) setShowDropdown(true);
                   }}
-                  placeholder="Type any city (e.g. Hyderabad, Dallas, London)"
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setShowDropdown(false);
+                    }
+                  }}
+                  placeholder="Type any city (e.g. Dallas, London, Mumbai)"
                   required
                   className="w-full pl-8 pr-8 py-2 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-100 text-xs focus:outline-none focus:border-indigo-400 transition"
                 />
@@ -471,8 +477,16 @@ export function ScanLauncher({
                   {predictions.map((p, idx) => (
                     <div
                       key={idx}
+                      tabIndex={0}
+                      role="button"
                       onClick={() => handleSelectPrediction(p)}
-                      className="p-2.5 hover:bg-white/[0.08] cursor-pointer transition flex items-start gap-2 text-xs"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleSelectPrediction(p);
+                        }
+                      }}
+                      className="p-2.5 hover:bg-white/[0.08] focus:bg-white/[0.1] focus:outline-none cursor-pointer transition flex items-start gap-2 text-xs"
                     >
                       <MapPin className="w-3.5 h-3.5 text-indigo-400 shrink-0 mt-0.5" />
                       <span className="text-slate-200 truncate">{p.description}</span>
@@ -480,6 +494,29 @@ export function ScanLauncher({
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Radius Selector */}
+            <div className="md:col-span-2">
+              <label className="block text-[11px] text-slate-400 font-medium mb-1">
+                Radius
+              </label>
+              <div className="grid grid-cols-3 gap-1 bg-slate-900/60 p-1 rounded-lg border border-white/[0.12]">
+                {[10, 15, 25].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setRadiusKm(r)}
+                    className={`py-1 text-xs font-mono font-medium rounded transition ${
+                      radiusKm === r
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {r}km
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Discovery Mode Selector */}
@@ -499,7 +536,7 @@ export function ScanLauncher({
             </div>
 
             {/* Engine Selector */}
-            <div className="md:col-span-1">
+            <div className="md:col-span-2">
               <label className="block text-[11px] text-slate-400 font-medium mb-1">
                 Provider
               </label>
@@ -509,31 +546,33 @@ export function ScanLauncher({
                 onChange={(e) => setSource(e.target.value as any)}
                 className="w-full px-2 py-2 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer"
               >
-                <option value="google_places">Google</option>
-                <option value="live_google_maps">Live</option>
-                <option value="serpapi">SerpAPI</option>
-                <option value="apify">Apify</option>
+                <option value="google_places">Google (Official Places)</option>
+                <option value="live_google_maps">Live Maps (Scrape Opt-in)</option>
+                <option value="serpapi">SerpAPI (Requires Key)</option>
+                <option value="apify">Apify (Requires Token)</option>
+                <option value="outscraper">Outscraper (Requires Key)</option>
+                <option value="mock">Mock Simulator (Offline)</option>
               </select>
             </div>
 
             {/* Submit & Action Controls */}
-            <div className="md:col-span-2 flex items-end gap-2">
+            <div className="md:col-span-12 flex items-center justify-end gap-2 mt-1">
               {isLoading ? (
-                <div className="flex items-center gap-1.5 w-full">
+                <div className="flex items-center gap-1.5 w-full sm:w-auto">
                   <button
                     data-testid="btn-launch-discovery"
                     disabled
-                    className="flex-1 py-2 px-2 rounded-lg bg-indigo-600/80 text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-not-allowed opacity-90 shadow-lg shadow-indigo-950/40"
+                    className="flex-1 sm:flex-none py-2 px-4 rounded-lg bg-indigo-600/80 text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-not-allowed opacity-90 shadow-lg shadow-indigo-950/40"
                   >
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Scanning...</span>
+                    <span>Scanning Market...</span>
                   </button>
                   {onCancelScan && (
                     <button
                       type="button"
                       onClick={onCancelScan}
                       title="Cancel active scan"
-                      className="py-2 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs flex items-center justify-center gap-1 transition cursor-pointer shadow-lg shadow-rose-900/30 shrink-0"
+                      className="py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs flex items-center justify-center gap-1 transition cursor-pointer shadow-lg shadow-rose-900/30 shrink-0"
                     >
                       <Square className="w-3 h-3 fill-current" />
                       <span>Cancel</span>
@@ -545,7 +584,7 @@ export function ScanLauncher({
                   data-testid="btn-launch-discovery"
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-indigo-900/30 disabled:opacity-50"
+                  className="w-full sm:w-auto py-2 px-6 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-indigo-900/30 disabled:opacity-50"
                 >
                   <Search className="w-3.5 h-3.5" />
                   <span>Scan Market</span>

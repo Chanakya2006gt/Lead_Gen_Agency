@@ -3,11 +3,8 @@
 import React from "react";
 import { Lead } from "@/core/db/schema";
 import { ScoreGauge } from "./ScoreGauge";
+import { OpportunityBadge } from "./OpportunityBadge";
 import {
-  Unlink,
-  XCircle,
-  Smartphone,
-  Sparkles,
   ExternalLink,
   ChevronRight,
   Phone,
@@ -15,7 +12,9 @@ import {
   Star,
   ShieldCheck,
   ShieldAlert,
-  Clock
+  Clock,
+  Sparkles,
+  Unlink
 } from "lucide-react";
 
 interface OpportunityCardGridProps {
@@ -31,47 +30,17 @@ export function OpportunityCardGrid({
 }: OpportunityCardGridProps) {
   if (leads.length === 0) {
     return (
-      <div className="py-20 text-center text-slate-400 card-surface">
-        <p className="text-sm font-medium text-slate-300">No qualified opportunities found.</p>
-        <p className="text-xs text-slate-500 mt-1">
-          Try adjusting your search filters or launch a discovery scan above.
+      <div className="py-12 px-6 text-center flex flex-col items-center justify-center card-surface">
+        <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-white/20 flex items-center justify-center text-indigo-300 mb-2.5 shadow-md">
+          <Sparkles className="w-5 h-5" />
+        </div>
+        <p className="text-sm font-semibold text-white tracking-tight">No qualified opportunities found for this filter</p>
+        <p className="text-xs text-slate-300 mt-1 max-w-md">
+          Try adjusting your search filters or launch a discovery scan above to uncover high-intent businesses.
         </p>
       </div>
     );
   }
-
-  const renderBadge = (lead: Lead) => {
-    if (lead.isGbpDisconnected) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
-          <Unlink className="w-3 h-3 text-purple-400" />
-          <span>Unlinked GBP Asset</span>
-        </span>
-      );
-    }
-    if (!lead.hasWebsite) {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-          <XCircle className="w-3 h-3 text-amber-400" />
-          <span>No Website Gap</span>
-        </span>
-      );
-    }
-    if (lead.opportunityType === "CUSTOM_OPERATIONAL_SOFTWARE") {
-      return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-          <Sparkles className="w-3 h-3 text-indigo-400" />
-          <span>Custom Ops Software</span>
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-mono font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30">
-        <Smartphone className="w-3 h-3 text-blue-400" />
-        <span>Mobile / Booking Gap</span>
-      </span>
-    );
-  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -83,15 +52,24 @@ export function OpportunityCardGrid({
         return (
           <div
             key={lead.id}
+            tabIndex={0}
+            role="button"
+            aria-label={`Inspect ${lead.name}`}
             onClick={() => onSelectLead(lead)}
-            className={`card-surface p-5 hover:-translate-y-1.5 hover:shadow-2xl hover:border-indigo-500/40 transition-all duration-300 flex flex-col justify-between cursor-pointer group relative ${
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelectLead(lead);
+              }
+            }}
+            className={`card-surface p-5 hover:-translate-y-1.5 hover:shadow-2xl hover:border-indigo-500/40 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all duration-300 flex flex-col justify-between cursor-pointer group relative ${
               isSelected ? "border-indigo-500 bg-[#0F1422]" : ""
             }`}
           >
             <div>
               {/* Card Top: Score + Opportunity Badge */}
               <div className="flex items-start justify-between gap-3 mb-3.5">
-                {renderBadge(lead)}
+                <OpportunityBadge lead={lead} />
                 <ScoreGauge score={lead.totalLeadScore ?? 0} size="sm" />
               </div>
 
