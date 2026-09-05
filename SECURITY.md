@@ -24,9 +24,10 @@ Lead Engine is designed as a **local-first, single-operator acquisition workstat
 ### 2.2 Dual-Stage SSRF Defense (Pre-Check + Post-Navigation Recheck)
 When auditing arbitrary target URLs:
 1. **Pre-Navigation Check**: Resolves all DNS A/AAAA records and rejects private/loopback/cloud metadata IP ranges (`127.0.0.0/8`, `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `169.254.169.254`, IPv4-mapped IPv6, carrier-grade NAT).
-2. **Post-Navigation Destination Recheck**: After `page.goto()`, inspects `page.url()`. If any HTTP redirect (301/302/307) leads to a restricted internal/private IP or metadata endpoint, the context is immediately terminated and an error is thrown.
+2. **Post-Navigation Destination Recheck**: After `page.goto()`, inspects `page.url()` and HTTP response events. If any HTTP redirect (301/302/307) leads to a restricted internal/private IP or metadata endpoint, the context is immediately terminated.
 3. **Strict 8,000ms Timeout**: Navigation is bounded by a hard `8,000ms` timeout.
 4. **Context Isolation**: Every audit runs in an ephemeral, freshly created Playwright browser context that is destroyed immediately after inspection.
+5. **Threat Model & Residual Risk**: Pre-navigation DNS filtering blocks common cases (typed private hostnames, literal metadata IPs, obfuscated encodings, private ranges). Because Chromium resolves DNS independently (TOCTOU), determined DNS-rebinding attacks represent a theoretical residual risk that is accepted under the local single-operator workstation threat model.
 
 ### 2.3 CSV Formula Injection Defense
 In `/api/leads/export`, cell values are inspected. Any string beginning with dangerous spreadsheet formula triggers (`=`, `+`, `-`, `@`, `\t`, `\r`) is automatically prefixed with `'` to neutralize formula execution in Microsoft Excel and Google Sheets.
@@ -41,4 +42,4 @@ Every response served by the command center includes standard security headers:
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
-- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self';`
+- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' ['unsafe-eval' in dev]; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self' https://nominatim.openstreetmap.org;`
