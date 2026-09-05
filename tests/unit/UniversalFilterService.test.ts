@@ -72,10 +72,11 @@ describe("UniversalFilterService (Core Invariant Verification)", () => {
     expect(result.qualified).toBe(true);
     expect(result.reviewsLast30Days).toBe(4);
     expect(result.reviewsLast90Days).toBe(5);
-    expect(result.reviewTrend).toBe("GROWING");
+    // Single discovery pull cannot statistically establish trend; yields UNKNOWN
+    expect(result.reviewTrend).toBe("UNKNOWN");
   });
 
-  it("Recency & Trend: Flags as STALE when zero reviews in past 90 days", () => {
+  it("Recency & Trend: Counts 30d/90d reviews and keeps single-pull trend as UNKNOWN", () => {
     const reviews = [
       { publishedAtDate: "2025-12-01T00:00:00Z" },
       { publishedAtDate: "2025-10-01T00:00:00Z" },
@@ -93,6 +94,7 @@ describe("UniversalFilterService (Core Invariant Verification)", () => {
     expect(result.qualified).toBe(true);
     expect(result.reviewsLast30Days).toBe(0);
     expect(result.reviewsLast90Days).toBe(0);
-    expect(result.reviewTrend).toBe("STALE");
+    // Single discovery pull cannot statistically establish trend; yields UNKNOWN
+    expect(result.reviewTrend).toBe("UNKNOWN");
   });
 });

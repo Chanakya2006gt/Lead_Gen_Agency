@@ -154,7 +154,7 @@ export class DossierSynthesizer {
     // 7. Signal Provenance & Confidence Ledger
     const provenance: SignalProvenance = {
       ratingConfidence: isGoogleVerified ? "high" : "none",
-      reviewVelocityConfidence: isGoogleVerified && params.reviewTrend !== "UNKNOWN" ? "observed" : "unknown",
+      reviewVelocityConfidence: isGoogleVerified && params.reviewTrend !== "UNKNOWN" ? "longitudinal" : "unknown",
       identityConfidence: isGoogleVerified ? "google_verified" : "direct_audit",
       auditConfidence: params.auditTelemetry ? "empirical" : "pending",
     };

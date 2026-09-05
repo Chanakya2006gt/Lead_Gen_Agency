@@ -30,12 +30,10 @@ Commercial B2B lead generation and website auditing tools (such as Clay, MyWebAu
    - `rating >= 4.0` (Strictly 4.0, rejecting 3.99).
    - `review_count >= 50` (Strictly 50, rejecting 49).
    - Both conditions must be satisfied simultaneously to enter the candidate pool.
-3. **Mandatory Review Recency**:
-   - Computes `reviews_last_30_days`, `reviews_last_90_days`, `reviews_last_180_days`, and `last_review_date`.
-   - Initial threshold: `reviews_last_90_days >= 3` (configurable parameter).
-4. **Review Trend Velocity**:
-   - Computes velocity ratio: $R_v = \frac{\text{reviews}_{30\text{d}} \times 3}{\text{reviews}_{90\text{d}} + 0.001}$
-   - Classifies trajectory into: `GROWING`, `STABLE`, `DECLINING`, `STALE`, `UNKNOWN`.
+3. **Descriptive Review Recency Metrics**:
+   - Computes `reviews_last_30_days`, `reviews_last_90_days`, `reviews_last_180_days`, and `last_review_date` when review timestamps are available.
+4. **Longitudinal Review Velocity**:
+   - Evaluates review trajectory across historical observation ledger records into `GROWING`, `STABLE`, `DECLINING`, `STALE`, or `UNKNOWN`. Single discovery pulls evaluate honestly to `UNKNOWN`.
 5. **Binary Website Gate**:
    - `website == null` $\rightarrow$ Flagged immediately as **High-Priority No-Website Opportunity**.
    - `website != null` $\rightarrow$ Queued for multi-vector Headless Playwright Audit.
@@ -76,7 +74,10 @@ Commercial B2B lead generation and website auditing tools (such as Clay, MyWebAu
 
 ### 4.1 Discovery & Ingestion Module
 - Supports modular scraper adapters:
-  - `ApifyGoogleMapsAdapter` (Production API).
+  - `GooglePlacesApiAdapter` (Primary official Places API).
+  - `LiveGoogleMapsAdapter` (Headless Playwright Crawler).
+  - `SerpApiGoogleMapsAdapter` (Structured search API).
+  - `ApifyMapsAdapter` (Production API).
   - `OutscraperAdapter` (Alternative API).
   - `MockDiscoveryAdapter` (Offline / zero-cost test suite with realistic business data).
 - Validates query inputs and triggers asynchronous pipeline execution with real-time status logging.
@@ -84,7 +85,7 @@ Commercial B2B lead generation and website auditing tools (such as Clay, MyWebAu
 ### 4.2 Universal Filter & Momentum Engine
 - Evaluates raw business records against qualification gates.
 - Parses ISO review timestamps and calculates 30-day, 90-day, and 180-day buckets.
-- Assigns velocity classifications (`GROWING`, `STABLE`, `DECLINING`, `STALE`).
+- Tracks longitudinal velocity across observation ledger history.
 
 ### 4.3 Headless Playwright Audit Engine
 - Launches headless Chromium instance.
@@ -112,5 +113,5 @@ Commercial B2B lead generation and website auditing tools (such as Clay, MyWebAu
 ## 5. Non-Functional Requirements
 - **Performance**: Lead scoring and local filtering under 5ms per record; Playwright audit under 8s per site with timeout protection.
 - **Reliability**: Graceful handling of dead URLs, anti-bot protections, and network timeouts.
-- **Data Integrity**: PostgreSQL persistence with Drizzle ORM and strict JSON schema validation.
+- **Data Integrity**: Local SQLite (WAL) persistence with Drizzle ORM and strict JSON schema validation.
 - **Zero Hallucination Guarantee**: All audit points must match DOM/telemetry evidence.

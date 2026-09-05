@@ -36,9 +36,11 @@ export class OutscraperAdapter implements IDiscoveryAdapter {
     const results: any[] = data.data?.[0] || [];
 
     return results.map((item) => {
-      const reviews: RawReviewTimestamp[] = (item.reviews_data || []).map((r: any) => ({
-        publishedAtDate: r.google_order_date || r.snippet_date || new Date().toISOString(),
-      }));
+      const reviews: RawReviewTimestamp[] = (item.reviews_data || [])
+        .filter((r: any) => Boolean(r.google_order_date || r.snippet_date))
+        .map((r: any) => ({
+          publishedAtDate: r.google_order_date || r.snippet_date,
+        }));
 
       return {
         placeId: item.place_id || item.google_id || `outscraper_${Math.random().toString(36).substring(2, 9)}`,

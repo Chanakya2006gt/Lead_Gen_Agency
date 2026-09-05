@@ -9,6 +9,7 @@ import { SerpApiGoogleMapsAdapter } from "@/features/discovery/SerpApiGoogleMaps
 import { ApifyMapsAdapter } from "@/features/discovery/ApifyMapsAdapter";
 import { OutscraperAdapter } from "@/features/discovery/OutscraperAdapter";
 import { UniversalFilterService } from "@/features/qualification/UniversalFilterService";
+import { ReviewVelocityLedger } from "@/features/qualification/ReviewVelocityLedger";
 import { PlaywrightAuditEngine } from "@/features/auditor/PlaywrightAuditEngine";
 import { DossierSynthesizer } from "@/features/synthesis/DossierSynthesizer";
 import { BusinessIdentityResolver } from "@/features/identity/BusinessIdentityResolver";
@@ -393,6 +394,12 @@ export class ScanPipelineService {
                 ? +(filterResult.rating - previousRating).toFixed(1)
                 : 0;
 
+              // Compute Longitudinal Review Velocity from observation ledger
+              const ledgerReviewTrend = ReviewVelocityLedger.computeTrend(
+                { reviewCount: filterResult.reviewCount, observedAt: now },
+                latestPrecedingObservation || null
+              );
+
               // 3. Clock-Skew / Out-of-Order Guard:
               // Only update current lead mutable properties if incoming observation is newer or equal to lastObservedAt
               const isNewestObservation =
@@ -437,7 +444,7 @@ export class ScanPipelineService {
                       reviewsLast30Days: filterResult.reviewsLast30Days,
                       reviewsLast90Days: filterResult.reviewsLast90Days,
                       reviewsLast180Days: filterResult.reviewsLast180Days,
-                      reviewTrend: filterResult.reviewTrend,
+                      reviewTrend: ledgerReviewTrend,
                       auditStatus: (auditStatus === "FAILED" && existingLead.auditStatus === "AUDITED") ? existingLead.auditStatus : auditStatus,
                       auditTelemetry: (auditTelemetry || existingLead.auditTelemetry) as any,
                       reputationScore: dossier.reputationScore,
@@ -483,7 +490,7 @@ export class ScanPipelineService {
                     reviewsLast30Days: filterResult.reviewsLast30Days,
                     reviewsLast90Days: filterResult.reviewsLast90Days,
                     reviewsLast180Days: filterResult.reviewsLast180Days,
-                    reviewTrend: filterResult.reviewTrend,
+                    reviewTrend: ledgerReviewTrend,
                     auditStatus,
                     auditTelemetry: auditTelemetry as any,
                     reputationScore: dossier.reputationScore,

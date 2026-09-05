@@ -247,8 +247,11 @@ try {
   if (process.env.NODE_ENV !== "test") {
     sqlite.exec("UPDATE discovery_scans SET status = 'FAILED' WHERE status = 'RUNNING';");
   }
-} catch (migErr) {
-  // Silent fallback
+} catch (migErr: any) {
+  console.error("[db migration] SQLite self-healing schema migration failed:", migErr);
+  if (!migErr?.message?.includes("duplicate column name")) {
+    throw migErr;
+  }
 }
 
 export const db = drizzleSqlite(sqlite, { schema });

@@ -114,22 +114,9 @@ export class UniversalFilterService {
         if (ageDays <= 180) reviewsLast180Days++;
       }
 
-      // Determine Velocity Trend based on actual measured timestamps
-      const baselineMonthlyVelocity = reviewsLast90Days / 3;
-      if (baselineMonthlyVelocity > 0) {
-        const velocityRatio = reviewsLast30Days / baselineMonthlyVelocity;
-        if (velocityRatio > 1.25) {
-          reviewTrend = "GROWING";
-        } else if (velocityRatio >= 0.75) {
-          reviewTrend = "STABLE";
-        } else if (velocityRatio > 0.2) {
-          reviewTrend = "DECLINING";
-        } else {
-          reviewTrend = "STALE";
-        }
-      } else {
-        reviewTrend = reviewsLast30Days > 0 ? "GROWING" : "STALE";
-      }
+      // Determine Velocity Trend: Single discovery pull cannot establish statistical velocity.
+      // Longitudinal velocity is calculated exclusively from the lead_observations ledger.
+      reviewTrend = "UNKNOWN";
     }
 
     return {

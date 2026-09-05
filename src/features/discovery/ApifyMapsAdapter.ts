@@ -60,9 +60,11 @@ export class ApifyMapsAdapter implements IDiscoveryAdapter {
     for (const item of items) {
       const placeId = item.placeId || item.id || `apify_${Math.random().toString(36).substring(2, 9)}`;
       if (!candidateMap.has(placeId)) {
-        const reviews: RawReviewTimestamp[] = (item.reviews || []).map((r: any) => ({
-          publishedAtDate: r.publishedAtDate || r.date || new Date().toISOString(),
-        }));
+        const reviews: RawReviewTimestamp[] = (item.reviews || [])
+          .filter((r: any) => Boolean(r.publishedAtDate || r.date))
+          .map((r: any) => ({
+            publishedAtDate: r.publishedAtDate || r.date,
+          }));
 
         const actualCategory = item.categoryName || item.category || "Operating Business";
 
