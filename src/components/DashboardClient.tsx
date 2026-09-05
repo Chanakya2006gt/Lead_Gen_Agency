@@ -340,8 +340,8 @@ export function DashboardClient() {
           priority
           className="object-cover object-[center_20%] opacity-100 contrast-[1.25] brightness-[1.2]"
         />
-        {/* Cinematic Rim Glow and Ambient Lighting Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#070A10]/75 via-black/20 to-black/30 pointer-events-none" />
+        {/* Cinematic Scrim Overlay & Legibility Shield */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#070A10] via-[#070A10]/75 to-[#070A10]/80 pointer-events-none" />
         <div className="absolute inset-0 bg-radial-[circle_at_50%_30%] from-indigo-500/10 via-transparent to-transparent pointer-events-none" />
       </div>
 

@@ -57,7 +57,7 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     await auditBtn.click();
 
     // Verify Slide-Over Drawer opens with audit results
-    const drawer = page.locator(".fixed.inset-0");
+    const drawer = page.locator('[role="dialog"]');
     await expect(drawer).toBeVisible({ timeout: 45000 });
     await expect(drawer.locator("text=Why This Lead")).toBeVisible();
     await expect(drawer.locator("text=Audit Telemetry & Observations")).toBeVisible();
@@ -94,5 +94,30 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
 
     // Fast search input visible
     await expect(page.locator("input[placeholder*='Search opportunity']")).toBeVisible();
+  });
+
+  test("Drawer Accessibility: Dialog semantics, aria-modal, and Escape-to-close", async ({ page }) => {
+    test.setTimeout(90000);
+    await page.goto("/");
+    await unlockWorkstationIfNeeded(page);
+
+    // Switch to Instant URL Teardown Mode
+    const directTab = page.locator("button:has-text('Instant URL Teardown')");
+    await expect(directTab).toBeVisible({ timeout: 15000 });
+    await directTab.click({ force: true });
+
+    // Trigger instant teardown to open the drawer
+    const urlInput = page.locator("input[placeholder*='sowjanyadental.com']");
+    await urlInput.fill("https://trelio.in");
+    await page.locator("button:has-text('Run Teardown')").click();
+
+    // Verify dialog role and aria-modal on Radix dialog content
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toBeVisible({ timeout: 45000 });
+    await expect(dialog).toHaveAttribute("aria-modal", "true");
+
+    // Press Escape to test accessible keyboard dismissal
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible({ timeout: 5000 });
   });
 });

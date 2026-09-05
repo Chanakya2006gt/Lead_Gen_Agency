@@ -262,18 +262,21 @@ Deliverables:
   return (
     <Dialog.Root open={!!lead} onOpenChange={(open) => { if (!open) onClose(); }}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed top-0 left-0 w-full h-full z-50 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200" />
         <Dialog.Content
-          aria-describedby={undefined}
-          className="fixed inset-0 z-50 flex justify-end pointer-events-none focus:outline-none"
+          aria-modal="true"
+          aria-label={`Lead Dossier for ${lead.name}`}
+          className="fixed top-0 right-0 z-50 h-full w-full max-w-full sm:max-w-xl bg-[#0D111A] border-l border-white/[0.08] flex flex-col shadow-2xl animate-in slide-in-from-right duration-250 focus:outline-none"
         >
-          <div className="w-full max-w-full sm:max-w-xl bg-[#0D111A] border-l border-white/[0.08] flex flex-col h-full shadow-2xl animate-in slide-in-from-right duration-250 pointer-events-auto">
-            <Dialog.Title className="sr-only">
-              Lead Dossier: {lead.name}
-            </Dialog.Title>
+          <Dialog.Title className="sr-only">
+            Lead Dossier: {lead.name}
+          </Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Detailed technical observations, commercial scoping, and outreach scripts for {lead.name}
+          </Dialog.Description>
 
-            {/* Drawer Header */}
-            <div className="p-4 sm:p-6 border-b border-white/[0.08] flex items-start justify-between bg-[#0A0D14] shrink-0 gap-2">
+          {/* Drawer Header */}
+          <div className="p-4 sm:p-6 border-b border-white/[0.08] flex items-start justify-between bg-[#0A0D14] shrink-0 gap-2">
             <div className="space-y-1.5 max-w-[82%] sm:max-w-[80%] min-w-0">
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <h2 className="text-base sm:text-lg font-bold text-white tracking-tight truncate max-w-full">{lead.name}</h2>
@@ -663,9 +666,8 @@ Deliverables:
             </button>
           </div>
         </div>
-      </div>
-    </Dialog.Content>
-  </Dialog.Portal>
-</Dialog.Root>
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>
   );
 }

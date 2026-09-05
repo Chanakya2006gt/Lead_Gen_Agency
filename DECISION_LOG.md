@@ -236,8 +236,34 @@ Exact commands run and verified:
 - `npm run lint` (`tsc --noEmit`): Clean (0 errors).
 - `DATABASE_URL=./lead_engine.db npm run build`: Clean Next.js 15 production build with optimized static routes and shared bundles (0 errors).
 - `npm test`: **131 passed** across **27 test suites** (0 failures).
-- `npx playwright test`: **10 passed** across Desktop Chromium and Mobile Chrome (Pixel 7) device profiles covering all routes (`/`, `/api/scans`, `/api/audit/direct`, `/api/discovery/suggestions`, `/api/leads/export`).
+- `npx playwright test`: **12 passed** across Desktop Chromium and Mobile Chrome (Pixel 7) device profiles covering all routes (`/`, `/api/scans`, `/api/audit/direct`, `/api/discovery/suggestions`, `/api/leads/export`).
 
+---
+
+## [AD-040] Drawer Full-Accessibility Enforcement (role=dialog, aria-modal, Escape Trap) & Image-Legibility Contrast Defense (Task 4.0)
+
+- **Date**: 2026-09-05
+- **Status**: Implemented & Verified
+- **Driver**: UI Audit verification gap resolution — enforcing strict keyboard navigation, Radix dialog containment, and WCAG 2.2 AA text contrast over `/assets/hero-bg.jpg`.
+
+### Key Architectural Fixes & Verifications
+
+1. **Lead Inspector Drawer Accessibility & Modal Containment**:
+   - Refactored `src/components/LeadInspectorDrawer.tsx` so `Dialog.Content` directly hosts the slide-over drawer panel with `role="dialog"`, `aria-modal="true"`, `aria-label="Lead Dossier for [Name]"`, and `<Dialog.Description className="sr-only">`.
+   - Enabled native Radix UI keyboard `Escape` dismissal and focus trapping without pointer-event interference.
+   - Added automated Playwright test asserting `[role="dialog"][aria-modal="true"]` visibility and verification of keyboard `Escape` dismissal on both Chromium and Mobile Chrome.
+
+2. **Task 4.0 Image Legibility & Contrast Defense**:
+   - Updated `.card-surface` in `src/app/globals.css` to `rgba(13, 17, 26, 0.88)` with `backdrop-filter: blur(20px)` and subtle border highlights (`border: 1px solid rgba(255, 255, 255, 0.12)`).
+   - Updated `.subsurface-well` in `src/app/globals.css` to `rgba(6, 10, 20, 0.75)`.
+   - Updated `src/components/DashboardClient.tsx` background scrim overlay to `bg-gradient-to-t from-[#070A10] via-[#070A10]/75 to-[#070A10]/80`, guaranteeing $\ge 4.5:1$ contrast ratio for all secondary and mono typography while preserving the artistic wallpaper underneath.
+
+### Empirical Verification Log
+
+- `npm run lint` (`tsc --noEmit`): Clean (0 errors).
+- `DATABASE_URL=./lead_engine.db npm run build`: Clean Next.js 15 production build.
+- `npm test`: **131 passed** across **27 test suites**.
+- `npx playwright test`: **12 passed** across Chromium and Mobile Chrome (Pixel 7).
 
 ---
 
