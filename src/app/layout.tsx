@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -16,6 +16,12 @@ export const metadata: Metadata = {
   title: "Lead Engine | Private Client Discovery & High-Conviction Auditor",
   description:
     "Private discovery and qualification command center evaluating local operating businesses against reputation momentum, technical website audits, and multi-tier operational software opportunities.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#070A10",
 };
 
 export default function RootLayout({

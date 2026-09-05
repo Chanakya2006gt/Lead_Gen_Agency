@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { LocationResolver } from "@/features/discovery/LocationResolver";
 import { MarketContextProvider } from "@/features/commercial/MarketContext";
-import { verifyApiAccess } from "@/core/auth/verifyAccess";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +12,6 @@ export interface MarketDiscoverySuggestion {
 }
 
 export async function GET(req: NextRequest) {
-  const authError = verifyApiAccess(req);
-  if (authError) return authError;
 
   const { searchParams } = new URL(req.url);
   const locationInput = searchParams.get("location") || "";

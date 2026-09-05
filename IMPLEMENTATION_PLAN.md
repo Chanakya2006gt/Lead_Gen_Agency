@@ -62,7 +62,53 @@ Record the baseline pass/fail counts in `DECISION_LOG.md`. **You cannot claim "n
 
 ---
 
-# PHASE 1 — Correctness & honesty (do first; these are the real defects)
+# PHASE 0 — Runtime crashes & first-load errors (do before everything else)
+
+> Added after verifying a separately-proposed "Mobile UI/UX Overhaul" plan against the code on 2026-09-05. The runtime claims in that plan were confirmed against the source; the two inaccuracies it contained are corrected inline below so they are not carried into implementation. These are live errors a user hits on load, so they precede the Phase 1 correctness work.
+
+## Task 0a — `500` on `/api/scans`: the `disposition` column can be missing after a legacy DB rebuild
+
+**Finding (verified):** Drizzle's `schema.ts` declares `disposition` `.notNull().default("PURSUE")`, but:
+- `disposition` is **not** in the `CREATE TABLE leads` DDL — it exists only as an `ALTER TABLE ADD COLUMN` at `src/core/db/index.ts:242-243`.
+- The migration reads `PRAGMA table_info(leads)` **once** at `index.ts:117-118` (`existingColumns`), *before* the `leads_nullable_fix` rebuild block (`index.ts:121-193`). That rebuild's table definition **omits `disposition`**, and the `if (!existingColumns.has("disposition"))` guard at line 242 then evaluates against the **stale, pre-rebuild** column set. On the legacy path (where `rating` was `NOT NULL`, triggering the rebuild) a database can therefore end up with **no `disposition` column while the code believes it has one** → `no such column: disposition` → 500 on any `leads` query.
+
+**⚠️ Verify the real cause before fixing (do not assume):** the code defect is proven, but nobody has confirmed your *live* `lead_engine.db` is actually missing the column (`sqlite3` was unavailable during the audit). First run `sqlite3 lead_engine.db "PRAGMA table_info(leads);"` (or a `better-sqlite3` one-liner) and confirm `disposition` is absent. If it's present, the 500 has a different cause — capture the actual server stack trace before changing anything. Fixing a theoretical cause is a guardrail-#7 stop-and-report situation.
+
+**Exact change (once confirmed):**
+1. Add `disposition TEXT NOT NULL DEFAULT 'PURSUE'` to the `CREATE TABLE IF NOT EXISTS leads` DDL in `index.ts`.
+2. Add `disposition` to the `leads_nullable_fix` table definition **and** to both the `INSERT (...)` column list and the `SELECT ...` projection in that rebuild block.
+3. After **any** table recreation, **re-read** `PRAGMA table_info(leads)` and recompute `existingColumns` before the idempotent `ADD COLUMN` guards run — so every column in `schema.ts` (`disposition`, `review_trend`, `rating_source`, `is_gbp_disconnected`, …) is verified against the *current* table, not the pre-rebuild snapshot.
+4. Reconcile the `notNull` mismatch per **Task 6** (Drizzle says `notNull`; the ALTER adds it nullable). Do them together — they touch the same lines.
+
+**Do NOT touch:** the boot-time `RUNNING → FAILED` sweep, the pragma/WAL setup, or other column guards. **Verify on a *copy* of `lead_engine.db`**, never the live file. `npm test` (uses `lead_engine_test.db`), `npm run build`. **Risk:** Medium (boot/DB path). **Effort:** ~2-3h (folds into Task 6).
+
+## Task 0b — `401` spam from `/api/discovery/suggestions` on first load
+
+**Finding (verified):** the route is gated by `verifyApiAccess(req)` at `src/app/api/discovery/suggestions/route.ts:15-16`. It returns only static, deterministic city/industry presets (no leads, no secrets), so on an unauthenticated first paint it 401s and spams the console.
+
+**Correction to the source plan:** the proposed secondary mitigation — *"suppress `ScanLauncher` network calls when `isLocked` is true"* — targets a state that never renders. `DashboardClient` **early-returns the lock screen when `isLocked`**, so `ScanLauncher` is not mounted while locked. The 401 fires in the brief *initial* render, before `fetchScans` flips `isLocked`. So the `isLocked` guard is aimed at the wrong place.
+
+**Exact change:** remove the `verifyApiAccess` guard from `suggestions/route.ts` (make it a public metadata helper). That alone resolves the 401 — it's the primary fix and it's correct. If you additionally want to avoid a wasted call before auth, gate the *initial* fetch in `ScanLauncher` on "have we confirmed a session," **not** on `isLocked`.
+
+**Do NOT:** open any other route's auth. Only `suggestions` is safe to unauthenticate (verify it exposes nothing lead-specific — as of audit it does not). `npm test`, `npm run build`. **Risk:** Low. **Effort:** ~15 min.
+
+## Task 0c — favicon `404`
+
+**Finding (verified):** no `favicon.ico`, no `public/favicon.ico`, no `src/app/icon.*`; `public/` holds only `assets/hero-bg.jpg`. Browsers request `/favicon.ico` on every load → 404.
+
+**Exact change:** add either a static `src/app/favicon.ico` **or** a `src/app/icon.tsx` (dynamic `ImageResponse`, 32×32, brand mark). Either satisfies Next.js's icon convention. A static `.ico` is the lower-risk option; the dynamic `icon.tsx` is fine too but keep it dependency-free and node-safe. **Do NOT** touch `hero-bg.jpg`. **Risk:** none. **Effort:** ~15 min.
+
+## Task 0d — add an explicit `viewport` export (but for the right reason)
+
+**Finding (verified):** `layout.tsx` has no `export const viewport`.
+
+**Correction to the source plan:** the claim that, without it, "mobile browsers emulate a 980px desktop layout" is **wrong**. Next.js 15 already injects a sensible default `<meta name="viewport" content="width=device-width, initial-scale=1">`. Your mobile is **not** scaling at 980px today — so adding the export will **not** fix a broken mobile layout (the layout is broken by the components, addressed in Phase 4). Add the export for the things Next's default doesn't cover: `themeColor` (address-bar tint) and any `maximumScale` policy.
+
+**Exact change:** add `export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#070A10" }` to `layout.tsx`. Reconsider `maximumScale: 5` vs accessibility (don't block pinch-zoom below 5). **Do NOT** expect this to change layout behavior. **Risk:** none. **Effort:** ~10 min.
+
+---
+
+# PHASE 1 — Correctness & honesty (the real defects; do right after Phase 0)
 
 ## Task 1 — Make "review velocity" honest (ledger-derived, never single-pull)
 
@@ -324,10 +370,57 @@ Record the baseline pass/fail counts in `DECISION_LOG.md`. **You cannot claim "n
 
 ---
 
+# PHASE 4 — Image-forward mobile overhaul (320px–768px)
+
+> The operator has deliberately chosen to keep the `/assets/hero-bg.jpg` background — it stays. This phase therefore **designs around and highlights the image**, not removes it. The earlier UI audit's "remove the image" note is retracted; it is replaced by the legibility-protection requirement in Task 4.0. Mobile-layout facts below were verified against the source on 2026-09-05.
+
+## Task 4.0 — Legibility protection is mandatory when the image stays (do first in this phase)
+
+**Why:** keeping a brightened photo (`opacity-100 contrast-[1.3] brightness-[1.25]` in `DashboardClient`) behind translucent glass panels of 10–11px low-contrast text is the readability risk the UI audit flagged. On mobile the image + glass + tiny type compound and data becomes hard to read. Keeping the image is fine; shipping unreadable data over it is not.
+
+**Exact change (design, not removal):**
+- Strengthen the scrim **behind content**, not the image itself: increase the gradient/overlay opacity in the content column, or raise the solidity of `.card-surface` over the image (e.g. a more opaque panel background on small screens) so text sits on a controlled surface while the image still frames the page.
+- Treat the image as **hero framing**: let it read at the top/edges (header, lock screen, empty states) where there's little text, and place dense data (table/cards) on more opaque surfaces so the photo shows *through the chrome*, not *behind the numbers*.
+- Verify contrast after: body text ≥ 4.5:1, mono badges ≥ 3:1, measured over the actual image region (not the flat canvas). This is the one hard gate for keeping the image.
+
+**Do NOT:** remove or desaturate the image, or delete the radial glow the operator chose — adjust opacity/scrim only. **Risk:** Low. **Effort:** ~2-3h incl. contrast checks.
+
+## Task 4.1 — Responsive layouts (verified facts)
+
+Each item below was confirmed in the source; make the change and verify at 320 / 375 / 390 / 768px with **zero horizontal body overflow**.
+
+- **Header** (`Header.tsx:27`, currently `px-6 py-3`): compact mobile bar — `px-4 py-2.5`, stats as concise badges, streamlined export. Keep the desktop layout at `sm:`+.
+- **ExecutiveMetrics** (`ExecutiveMetrics.tsx:28`, currently `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`): change mobile to `grid-cols-2` with `p-3 sm:p-4`, so all four KPIs fit in two compact rows instead of a ~600px stack. Keep the honesty fixes from the audit — this task is layout only; do **not** re-introduce the fabricated "pipeline value" total (that's a separate honesty fix, see §3.2 of `UI_AUDIT.md`).
+- **LeadMatrixTable** (`LeadMatrixTable.tsx:40` defaults `viewMode:"table"`, wraps table in `overflow-x-auto` at line 247): auto-render the card layout below `md` (`< md` → cards, `md:`+ → the existing Table/Grid toggle). Don't remove the toggle for tablet/desktop.
+- **Filter pills / market tabs**: make horizontally scrollable on mobile (`overflow-x-auto no-scrollbar whitespace-nowrap`) instead of wrapping to multiple rows. `DashboardClient` market-tabs bar gets the same treatment.
+- **ScanLauncher**: full-width Industry + City; put **Radius** (control exists at `ScanLauncher.tsx:499-511` — the source plan is right, and this corrects the earlier UI_AUDIT which wrongly said radius was missing) and Discovery Mode in a `grid-cols-2 gap-2`; full-width touch "Scan Market". Make the suggested-industry chips horizontally scrollable rather than 4-row wrap.
+- **OpportunityCardGrid** (`OpportunityCardGrid.tsx`): `p-4 sm:p-5`, and ensure interactive targets are ≥44px tall (touch).
+- **LeadInspectorDrawer**: full-screen on mobile (`w-full inset-0 max-w-none sm:max-w-xl`), `p-4 sm:p-6`, outreach tabs as `grid grid-cols-4 gap-1` instead of a cramped inline bar, sticky bottom action bar with safe-area padding. **Fold in the accessibility fixes here** (Escape-to-close, `role="dialog"`, focus trap) from `UI_AUDIT.md §4` — the drawer is already being touched, so do both at once rather than twice.
+- **DashboardClient**: responsive container padding `p-3.5 sm:p-6 space-y-4 sm:space-y-5`.
+- **globals.css**: add a `.no-scrollbar` utility (not currently defined) and confirm no unwanted horizontal body overflow on iOS/Android.
+
+**Do NOT:** change the desktop (`md:`+) layouts beyond what's needed; this is additive mobile work. Keep the image (Task 4.0).
+
+## Task 4.2 — Verification (mobile)
+
+- Add a Playwright mobile project (`devices["iPhone 14"]`, 390×844) asserting `/` loads with **no horizontal overflow**, cards render below `md`, and the drawer opens/closes (incl. Escape). Manually check 320 / 375 / 390 / 768px.
+- Confirm the Phase 0 errors are gone: `/favicon.ico` → 200, `/api/discovery/suggestions` → 200 unauthenticated, `/api/scans` → 200 with no `disposition` column error.
+- Full gate: `npm run lint && npm test && npm run build && npm run test:e2e`.
+
+**Risk:** Low–Medium (broad but additive). **Effort:** ~1–1.5 days.
+
+---
+
 ## Execution order & dependencies
 
 ```
 Baseline green suite (blocker)
+        │
+Phase 0 ├─ Task 0a (disposition/500 — confirm live DB first) [pairs with Task 6]
+        ├─ Task 0b (suggestions 401 → public route)
+        ├─ Task 0c (favicon)
+        └─ Task 0d (viewport export — not a layout fix)
+        │   ← live errors users hit on load; clear these first
         │
 Phase 1 ├─ Task 1  (velocity → ledger)      ← highest value
         ├─ Task 1b (adapter timestamp fabrication)
@@ -344,6 +437,10 @@ Phase 3 ├─ Task 6  (schema single source)
         ├─ Task 10 (disposition merge)
         ├─ Task 11 (cancel docs/behavior)
         └─ Task 12 (hygiene)
+        │
+Phase 4 ├─ Task 4.0 (image-forward legibility protection) ← gate for keeping the image
+        ├─ Task 4.1 (responsive layouts; folds in drawer a11y)
+        └─ Task 4.2 (mobile Playwright + first-load error re-check)
 ```
 
 Phases are independent enough to ship one at a time. **Do not start Phase N+1 until Phase N's suite is green and logged.**
@@ -362,6 +459,8 @@ The remediation is complete only when **all** hold and are recorded in `DECISION
 7. No fabricated data anywhere: single-pull `reviewTrend` is `UNKNOWN`; no `new Date()` timestamp fallbacks remain.
 8. Every shell command run and route exercised is logged in `DECISION_LOG.md` (the project's existing invariant).
 9. No new runtime dependency added; no public type/column/API shape changed except where a task explicitly authorized it.
+10. First-load is clean (Phase 0): `/favicon.ico` → 200, `/api/discovery/suggestions` → 200 unauthenticated, `/api/scans` → 200 with no `disposition` error.
+11. Mobile is verified (Phase 4): a Playwright iPhone-14 project passes; no horizontal overflow at 320/375/390/768px; the hero image is retained **and** text over it meets contrast (≥4.5:1 body / ≥3:1 badges) measured over the image region.
 
 ---
 
@@ -371,3 +470,4 @@ The remediation is complete only when **all** hold and are recorded in `DECISION
 - It does not re-architect the pipeline, scoring model, or adapter layer. Those work.
 - It does not chase every `any` or every stylistic nit — only the ones with real correctness/clarity value.
 - It does not touch `.env.local`, real keys, or the live database file.
+- **It does not remove the background hero image.** That was a deliberate operator choice; Phase 4 keeps it and designs around it (Task 4.0), protecting text legibility rather than deleting the image.

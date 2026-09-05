@@ -81,6 +81,7 @@ sqlite.exec(`
     lead_attractiveness_score INTEGER DEFAULT 0,
     total_lead_score INTEGER DEFAULT 0,
     opportunity_type TEXT NOT NULL DEFAULT 'UNKNOWN',
+    disposition TEXT NOT NULL DEFAULT 'PURSUE',
     dossier TEXT,
     human_status TEXT NOT NULL DEFAULT 'NEW',
     first_observed_at TEXT,
@@ -114,8 +115,8 @@ sqlite.exec(`
 
 // Self-healing migration for nullable fields & incremental columns
 try {
-  const columns = sqlite.prepare("PRAGMA table_info(leads)").all() as { name: string; notnull: number }[];
-  const existingColumns = new Set(columns.map((c) => c.name));
+  let columns = sqlite.prepare("PRAGMA table_info(leads)").all() as { name: string; notnull: number }[];
+  let existingColumns = new Set(columns.map((c) => c.name));
   const ratingCol = columns.find((c) => c.name === "rating");
 
   if (ratingCol && ratingCol.notnull === 1) {
@@ -155,6 +156,7 @@ try {
         lead_attractiveness_score INTEGER DEFAULT 0,
         total_lead_score INTEGER DEFAULT 0,
         opportunity_type TEXT NOT NULL DEFAULT 'UNKNOWN',
+        disposition TEXT NOT NULL DEFAULT 'PURSUE',
         dossier TEXT,
         human_status TEXT NOT NULL DEFAULT 'NEW',
         first_observed_at TEXT,
@@ -173,7 +175,7 @@ try {
         has_website, has_gbp_website_link, is_gbp_disconnected, website_url, gbp_website_url,
         unlinked_website_url, audit_status, audit_telemetry, reputation_score, digital_gap_score,
         opportunity_score, confidence_score, commercial_fit_score, lead_attractiveness_score,
-        total_lead_score, opportunity_type, dossier, human_status, first_observed_at,
+        total_lead_score, opportunity_type, disposition, dossier, human_status, first_observed_at,
         last_observed_at, observation_count, review_count_delta, rating_delta, identity_source,
         created_at, updated_at
       )
@@ -184,7 +186,7 @@ try {
         has_website, has_gbp_website_link, is_gbp_disconnected, website_url, gbp_website_url,
         unlinked_website_url, audit_status, audit_telemetry, reputation_score, digital_gap_score,
         opportunity_score, confidence_score, commercial_fit_score, lead_attractiveness_score,
-        total_lead_score, opportunity_type, dossier, human_status, first_observed_at,
+        total_lead_score, opportunity_type, 'PURSUE', dossier, human_status, first_observed_at,
         last_observed_at, observation_count, review_count_delta, rating_delta, identity_source,
         created_at, updated_at
       FROM leads;
@@ -192,6 +194,8 @@ try {
       ALTER TABLE leads_nullable_fix RENAME TO leads;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_leads_place_id_unique ON leads(place_id);
     `);
+    columns = sqlite.prepare("PRAGMA table_info(leads)").all() as { name: string; notnull: number }[];
+    existingColumns = new Set(columns.map((c) => c.name));
   }
 
   if (!existingColumns.has("rating_source")) {

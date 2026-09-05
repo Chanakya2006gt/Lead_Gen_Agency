@@ -88,29 +88,29 @@ export function LeadMatrixTable({
   return (
     <div className="space-y-3.5">
       {/* Search, Filter Pills & View Switcher Bar */}
-      <div className="card-surface p-3.5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+      <div className="card-surface p-3 sm:p-3.5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5 sm:gap-3">
         {/* Left: Search Input & Segmented Pills */}
-        <div className="flex flex-wrap items-center gap-2 flex-1">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0">
           {/* Search Box */}
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full sm:w-64 shrink-0">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search opportunity, business..."
               aria-label="Search opportunities and businesses"
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-100 text-xs focus:outline-none focus:border-indigo-400 transition font-sans"
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-100 text-xs focus:outline-none focus:border-indigo-400 transition font-sans min-h-[38px] sm:min-h-0"
             />
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3 sm:top-2.5" />
           </div>
 
-          {/* Interactive Filter Pills */}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
+          {/* Interactive Filter Pills (Horizontally Scrollable on Mobile) */}
+          <div className="flex items-center gap-1.5 text-xs font-mono overflow-x-auto no-scrollbar py-0.5 whitespace-nowrap -mx-1 px-1">
             <button
               type="button"
               onClick={() => setOpportunityFilter("ALL")}
               aria-label={`Show all ${counts.all} opportunities`}
-              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] sm:min-h-0 ${
                 opportunityFilter === "ALL"
                   ? "bg-indigo-600 text-white font-bold shadow-sm"
                   : "bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white border border-white/[0.08]"
@@ -124,7 +124,7 @@ export function LeadMatrixTable({
               type="button"
               onClick={() => setOpportunityFilter("DISCONNECTED_GBP_WEBSITE")}
               aria-label={`Show ${counts.unlinked} unlinked GBP assets`}
-              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] sm:min-h-0 ${
                 opportunityFilter === "DISCONNECTED_GBP_WEBSITE"
                   ? "bg-purple-600 text-white font-bold shadow-sm"
                   : "bg-white/[0.04] hover:bg-white/[0.08] text-purple-300 border border-purple-500/30"
@@ -139,7 +139,7 @@ export function LeadMatrixTable({
               type="button"
               onClick={() => setOpportunityFilter("WEBSITE")}
               aria-label={`Show ${counts.noWebsite} businesses without website`}
-              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] sm:min-h-0 ${
                 opportunityFilter === "WEBSITE"
                   ? "bg-amber-600 text-white font-bold shadow-sm"
                   : "bg-white/[0.04] hover:bg-white/[0.08] text-amber-300 border border-amber-500/30"
@@ -155,7 +155,7 @@ export function LeadMatrixTable({
                 type="button"
                 onClick={() => setOpportunityFilter("MOBILE_GAP")}
                 aria-label={`Show ${counts.mobileGap} businesses with mobile layout gaps`}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] sm:min-h-0 ${
                   opportunityFilter === "MOBILE_GAP"
                     ? "bg-blue-600 text-white font-bold shadow-sm"
                     : "bg-white/[0.04] hover:bg-white/[0.08] text-blue-300 border border-blue-500/30"
@@ -170,14 +170,14 @@ export function LeadMatrixTable({
         </div>
 
         {/* Right: Sort & View Toggle Switcher */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Website Filter Select (Retained for Test & Automation Compatibility) */}
+        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-white/[0.06]">
+          {/* Website Filter Select */}
           <select
             data-testid="filter-website"
             value={websiteFilter}
             onChange={(e) => setWebsiteFilter(e.target.value)}
             aria-label="Filter by website connection status"
-            className="px-2.5 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono"
+            className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono min-h-[36px] sm:min-h-0"
           >
             <option value="ALL">All Web States</option>
             <option value="NO_WEBSITE">No Website</option>
@@ -191,15 +191,15 @@ export function LeadMatrixTable({
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
             aria-label="Sort leads"
-            className="px-2.5 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono font-medium"
+            className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono font-medium min-h-[36px] sm:min-h-0"
           >
             <option value="score">Sort: Lead Score</option>
             <option value="reviews">Sort: Review Count</option>
             <option value="rating">Sort: Star Rating</option>
           </select>
 
-          {/* View Switcher (Table Matrix vs Grid Cards) */}
-          <div className="flex items-center p-0.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12]">
+          {/* View Switcher (Table Matrix vs Grid Cards - Visible on medium+ screens) */}
+          <div className="hidden md:flex items-center p-0.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12]">
             <button
               type="button"
               onClick={() => setViewMode("table")}
@@ -224,14 +224,23 @@ export function LeadMatrixTable({
         </div>
       </div>
 
-      {/* Main View Content (Table or Grid) */}
-      {viewMode === "grid" ? (
+      {/* Main View Content: Adaptive Card Grid for Mobile Screens & Configured View for Desktop */}
+      <div className="block md:hidden">
         <OpportunityCardGrid
           leads={filteredLeads}
           onSelectLead={onSelectLead}
           selectedLeadId={selectedLeadId}
         />
-      ) : (
+      </div>
+
+      <div className="hidden md:block">
+        {viewMode === "grid" ? (
+          <OpportunityCardGrid
+            leads={filteredLeads}
+            onSelectLead={onSelectLead}
+            selectedLeadId={selectedLeadId}
+          />
+        ) : (
         <div className="card-surface overflow-hidden">
           {filteredLeads.length === 0 ? (
             <div className="py-12 px-6 text-center flex flex-col items-center justify-center">
@@ -440,6 +449,7 @@ export function LeadMatrixTable({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

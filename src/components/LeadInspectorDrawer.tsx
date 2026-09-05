@@ -267,16 +267,16 @@ Deliverables:
           aria-describedby={undefined}
           className="fixed inset-0 z-50 flex justify-end pointer-events-none focus:outline-none"
         >
-          <div className="w-full max-w-xl bg-[#0D111A] border-l border-white/[0.08] flex flex-col h-full shadow-2xl animate-in slide-in-from-right duration-250 pointer-events-auto">
+          <div className="w-full max-w-full sm:max-w-xl bg-[#0D111A] border-l border-white/[0.08] flex flex-col h-full shadow-2xl animate-in slide-in-from-right duration-250 pointer-events-auto">
             <Dialog.Title className="sr-only">
               Lead Dossier: {lead.name}
             </Dialog.Title>
 
             {/* Drawer Header */}
-            <div className="p-6 border-b border-white/[0.08] flex items-start justify-between bg-[#0A0D14] shrink-0">
-            <div className="space-y-1.5 max-w-[80%]">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-bold text-white tracking-tight">{lead.name}</h2>
+            <div className="p-4 sm:p-6 border-b border-white/[0.08] flex items-start justify-between bg-[#0A0D14] shrink-0 gap-2">
+            <div className="space-y-1.5 max-w-[82%] sm:max-w-[80%] min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h2 className="text-base sm:text-lg font-bold text-white tracking-tight truncate max-w-full">{lead.name}</h2>
                 {lead.category && (
                   <span className="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-slate-800 text-slate-300 border border-white/[0.08]">
                     {lead.category}
@@ -351,7 +351,7 @@ Deliverables:
               </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-2 font-mono">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-400 mt-2 font-mono">
               {isGoogleVerified ? (
                 <span className="text-amber-400 font-semibold">
                   ★ {lead.rating!.toFixed(1)} <span className="text-slate-400 font-normal">({lead.reviewCount} Google reviews)</span>
@@ -371,7 +371,7 @@ Deliverables:
                 </a>
               )}
               {lead.formattedAddress && (
-                <span className="flex items-center gap-1 text-slate-400 truncate max-w-[240px] font-sans">
+                <span className="flex items-center gap-1 text-slate-400 truncate max-w-[200px] sm:max-w-[240px] font-sans">
                   <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
                   <span className="truncate">{lead.formattedAddress}</span>
                 </span>
@@ -379,11 +379,12 @@ Deliverables:
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <ScoreGauge score={lead.totalLeadScore ?? 0} size="sm" />
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition cursor-pointer"
+              aria-label="Close dossier drawer"
+              className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-white transition cursor-pointer min-h-[36px] min-w-[36px] flex items-center justify-center"
             >
               <X className="w-4 h-4" />
             </button>
@@ -391,13 +392,13 @@ Deliverables:
         </div>
 
         {/* Drawer Scrollable Body */}
-        <div className="p-6 overflow-y-auto space-y-6 text-xs bg-[#0D111A] flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 text-xs bg-[#0D111A] flex-1">
           {/* 1. WHY THIS LEAD (Commercial Thesis) */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 font-mono">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 font-mono">
               Why This Lead (Commercial Thesis)
             </h3>
-            <div className="p-3.5 rounded-lg bg-[#0A0D14] border border-white/[0.06] space-y-2 text-slate-300 leading-relaxed font-sans">
+            <div className="p-3 sm:p-3.5 rounded-lg bg-[#0A0D14] border border-white/[0.06] space-y-2 text-slate-300 leading-relaxed font-sans">
               {validatedOutreach.whyPoints.map((pt, idx) => (
                 <div key={idx} className="flex items-start gap-2">
                   <span className="text-indigo-400 font-bold mt-0.5">•</span>
@@ -409,7 +410,7 @@ Deliverables:
 
           {/* 2. COMMERCIAL ECONOMICS & FEASIBLE OFFER MATRIX */}
           {commercial && (
-            <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4 space-y-3">
+            <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-3.5 sm:p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-300 font-mono flex items-center gap-1.5">
                   <TrendingUp className="w-3.5 h-3.5 text-indigo-400" />
@@ -430,26 +431,26 @@ Deliverables:
 
               {/* Economic Metrics Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 font-mono">
-                <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
-                  <div className="text-[10px] text-slate-500 uppercase">Est. Business Scale</div>
-                  <div className="text-xs font-bold text-slate-200 mt-0.5">{commercial.businessScale}</div>
+                <div className="p-2 sm:p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                  <div className="text-[10px] text-slate-500 uppercase">Est. Scale</div>
+                  <div className="text-xs font-bold text-slate-200 mt-0.5 truncate">{commercial.businessScale}</div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
-                  <div className="text-[10px] text-slate-500 uppercase">Commercial Ceiling</div>
+                <div className="p-2 sm:p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                  <div className="text-[10px] text-slate-500 uppercase">Ceiling</div>
                   <div className="text-xs font-bold text-indigo-300 mt-0.5">
                     {curSym}{commercial.clientCommercialCeiling.max.toLocaleString(isINR ? "en-IN" : "en-US")}
                   </div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                <div className="p-2 sm:p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
                   <div className="text-[10px] text-slate-500 uppercase">Recommended Build</div>
                   <div className="text-xs font-bold text-emerald-400 mt-0.5">
                     {curSym}{buildOffer?.min.toLocaleString(isINR ? "en-IN" : "en-US")} – {curSym}{buildOffer?.max.toLocaleString(isINR ? "en-IN" : "en-US")}
                   </div>
                 </div>
 
-                <div className="p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
+                <div className="p-2 sm:p-2.5 rounded-lg bg-black/40 border border-white/[0.06]">
                   <div className="text-[10px] text-slate-500 uppercase">Monthly Care</div>
                   <div className="text-xs font-bold text-teal-400 mt-0.5">
                     {curSym}{careOffer?.min.toLocaleString(isINR ? "en-IN" : "en-US")}–{curSym}{careOffer?.max.toLocaleString(isINR ? "en-IN" : "en-US")}/mo
@@ -467,35 +468,35 @@ Deliverables:
 
           {/* 3. TECHNICAL AUDIT BREAKDOWN */}
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5 font-mono">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 font-mono">
               Audit Telemetry &amp; Observations
             </h3>
 
             {telemetry ? (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono">
-                  <div className="p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
+                  <div className="p-2 sm:p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
                     <div className="text-[10px] text-slate-500">SSL Security</div>
                     <div className={`text-xs font-semibold mt-0.5 ${telemetry.hasSsl ? "text-emerald-400" : "text-rose-400"}`}>
                       {telemetry.hasSsl ? "Active (HTTPS)" : "Insecure (HTTP)"}
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
+                  <div className="p-2 sm:p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
                     <div className="text-[10px] text-slate-500">Mobile Viewport</div>
                     <div className={`text-xs font-semibold mt-0.5 ${telemetry.viewportMetaPresent && !telemetry.hasHorizontalOverflow ? "text-emerald-400" : "text-rose-400"}`}>
                       {!telemetry.viewportMetaPresent ? "Missing Viewport" : telemetry.hasHorizontalOverflow ? "Layout Overflow" : "Responsive Pass"}
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
+                  <div className="p-2 sm:p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
                     <div className="text-[10px] text-slate-500">1-Tap Intake CTA</div>
                     <div className={`text-xs font-semibold mt-0.5 ${telemetry.hasDirectClickToCall || telemetry.hasWhatsAppDirectLink ? "text-emerald-400" : "text-amber-400"}`}>
                       {telemetry.hasWhatsAppDirectLink ? "WhatsApp Active" : telemetry.hasDirectClickToCall ? "Click-to-Call" : "No Direct CTA"}
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
+                  <div className="p-2 sm:p-2.5 rounded-lg bg-[#0A0D14] border border-white/[0.06]">
                     <div className="text-[10px] text-slate-500">Load Latency</div>
                     <div className={`text-xs font-semibold mt-0.5 ${telemetry.initialLoadLatencyMs < 1500 ? "text-emerald-400" : telemetry.initialLoadLatencyMs < 3000 ? "text-amber-400" : "text-rose-400"}`}>
                       {telemetry.initialLoadLatencyMs}ms
@@ -505,7 +506,7 @@ Deliverables:
 
                 {/* Findings List */}
                 {telemetry.findings && telemetry.findings.length > 0 && (
-                  <div className="p-3.5 rounded-lg bg-[#0A0D14] border border-white/[0.06] space-y-2">
+                  <div className="p-3 sm:p-3.5 rounded-lg bg-[#0A0D14] border border-white/[0.06] space-y-2">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 font-mono">
                       Observed Gaps ({telemetry.findings.length})
                     </div>
@@ -529,17 +530,17 @@ Deliverables:
 
           {/* 4. HIGH-CONVICTION OUTREACH DECKS */}
           <div>
-            <div className="flex items-center justify-between mb-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
                 <span>High-Conviction Sales Copy &amp; Scripts</span>
               </h3>
 
-              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-black/40 border border-white/[0.06]">
+              <div className="grid grid-cols-4 sm:flex items-center gap-1 p-0.5 rounded-lg bg-black/40 border border-white/[0.06] text-center">
                 <button
                   type="button"
                   onClick={() => setActiveTab("whatsapp")}
-                  className={`px-2 py-1 rounded text-[11px] font-mono transition cursor-pointer ${
+                  className={`px-2 py-1.5 sm:py-1 rounded text-[11px] font-mono transition cursor-pointer ${
                     activeTab === "whatsapp" ? "bg-emerald-600 text-white font-semibold" : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
@@ -548,25 +549,25 @@ Deliverables:
                 <button
                   type="button"
                   onClick={() => setActiveTab("email")}
-                  className={`px-2 py-1 rounded text-[11px] font-mono transition cursor-pointer ${
+                  className={`px-2 py-1.5 sm:py-1 rounded text-[11px] font-mono transition cursor-pointer ${
                     activeTab === "email" ? "bg-indigo-600 text-white font-semibold" : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  Cold Email
+                  Email
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab("phone")}
-                  className={`px-2 py-1 rounded text-[11px] font-mono transition cursor-pointer ${
+                  className={`px-2 py-1.5 sm:py-1 rounded text-[11px] font-mono transition cursor-pointer ${
                     activeTab === "phone" ? "bg-purple-600 text-white font-semibold" : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
-                  Phone Script
+                  Phone
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab("scope")}
-                  className={`px-2 py-1 rounded text-[11px] font-mono transition cursor-pointer ${
+                  className={`px-2 py-1.5 sm:py-1 rounded text-[11px] font-mono transition cursor-pointer ${
                     activeTab === "scope" ? "bg-slate-700 text-white font-semibold" : "text-slate-400 hover:text-slate-200"
                   }`}
                 >
@@ -590,7 +591,7 @@ Deliverables:
               </div>
             ) : (
               <div className="relative">
-                <pre className="p-4 rounded-lg bg-[#0A0D14] border border-white/[0.08] text-slate-200 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-all overflow-x-auto max-h-64">
+                <pre className="p-3.5 sm:p-4 rounded-lg bg-[#0A0D14] border border-white/[0.08] text-slate-200 font-mono text-[11px] leading-relaxed whitespace-pre-wrap select-all overflow-x-auto max-h-64">
                   {getActiveCopyText()}
                 </pre>
 
@@ -607,7 +608,7 @@ Deliverables:
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Copy {activeTab}</span>
+                      <span>Copy</span>
                     </>
                   )}
                 </button>
@@ -617,8 +618,8 @@ Deliverables:
         </div>
 
         {/* Drawer Bottom Triage Action Bar */}
-        <div className="p-4 border-t border-white/[0.08] bg-[#0A0D14] flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+        <div className="p-3.5 sm:p-4 border-t border-white/[0.08] bg-[#0A0D14] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
+          <div className="flex items-center justify-between sm:justify-start gap-2">
             <span className="text-[11px] text-slate-400 font-mono">Triage Status:</span>
             <select
               value={lead.humanStatus}
@@ -633,7 +634,7 @@ Deliverables:
                   }
                 }
               }}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/[0.12] text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-400 cursor-pointer"
+              className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-white/[0.12] text-slate-200 text-xs font-mono font-medium focus:outline-none focus:border-indigo-400 cursor-pointer min-h-[36px]"
             >
               <option value="NEW">NEW</option>
               <option value="REVIEWED">REVIEWED</option>
@@ -648,7 +649,7 @@ Deliverables:
                 href={`https://wa.me/${cleanPhone}?text=${encodeURIComponent(validatedOutreach.whatsappCopy)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center gap-1.5 transition cursor-pointer"
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer min-h-[38px]"
               >
                 <span>Open WhatsApp</span>
               </a>
@@ -656,7 +657,7 @@ Deliverables:
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs transition cursor-pointer border border-white/[0.08]"
+              className="flex-1 sm:flex-initial px-3.5 py-2 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 text-xs transition cursor-pointer border border-white/[0.08] min-h-[38px]"
             >
               Close
             </button>

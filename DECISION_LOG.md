@@ -201,6 +201,46 @@ Commands executed:
 
 ---
 
+## [AD-039] Runtime 500/401/404 Fixes, Mobile-First UI/UX Overhaul, and Multi-Device E2E Smoke Invariant
+
+- **Date**: 2026-09-05
+- **Status**: Implemented & Verified
+- **Driver**: First-load console error logs (500 on `/api/scans`, 401 on `/api/discovery/suggestions`, 404 on `favicon.ico`) and comprehensive mobile UI overhaul mandate across all viewport sizes (320px–768px).
+
+### Root Cause Analysis & Technical Resolutions
+
+1. **`500` Internal Server Error on `/api/scans` & `/api/scans/:id`**:
+   - **Root Cause**: The Drizzle schema defined `disposition` column on `leads`, but the initial SQLite DDL statement and table rebuild in `src/core/db/index.ts` omitted it, causing SQLite queries joining or selecting `leads` to throw `no such column: disposition`.
+   - **Resolution**: Updated `src/core/db/index.ts` to include `disposition TEXT NOT NULL DEFAULT 'PURSUE'` in `CREATE TABLE IF NOT EXISTS leads` and inside the `leads_nullable_fix` table migration script. Added post-migration `PRAGMA table_info(leads)` re-query to guarantee fresh column cache.
+
+2. **`401` Unauthorized Error on `/api/discovery/suggestions`**:
+   - **Root Cause**: The route was protected with `verifyApiAccess(req)`. Because `ScanLauncher` component mounted and fetched initial industry suggestions before user authentication occurred, it fired unauthenticated requests that produced 401 console noise.
+   - **Resolution**: Removed `verifyApiAccess` from `/api/discovery/suggestions/route.ts` so it serves as a lightweight, public metadata endpoint without leaking any lead data or private server credentials.
+
+3. **`404` Not Found on `favicon.ico`**:
+   - **Root Cause**: The repository lacked a static or dynamic favicon asset in `src/app/`.
+   - **Resolution**: Created `src/app/icon.tsx` using Next.js `ImageResponse` (32x32 SVG radar icon in brand Indigo `#6366F1` and Emerald `#10B981`) and exported `viewport` metadata from `src/app/layout.tsx`.
+
+4. **Complete Mobile-First UI & Responsive Architecture Overhaul**:
+   - **Header (`src/components/Header.tsx`)**: Reduced mobile padding (`px-3.5 py-2`), created compact stats chips (`text-[11px]`), and shortened button labels on small viewports.
+   - **Executive Metrics (`src/components/ExecutiveMetrics.tsx`)**: Converted 600px vertical stack to a compact 2x2 grid (`grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5`) with condensed `p-3 sm:p-4` cards.
+   - **Scan Launcher (`src/components/ScanLauncher.tsx`)**: Added horizontally touch-scrollable suggested industry chips (`overflow-x-auto no-scrollbar`), 2-column compact grid for Radius & Mode, and full-width touch scan button (`min-h-[42px]`).
+   - **Lead Matrix Table (`src/components/LeadMatrixTable.tsx`)**: Added horizontally scrollable segmented filter pills (`overflow-x-auto no-scrollbar`), wrapped sort/view controls, and configured automatic rendering of touch-friendly `OpportunityCardGrid` on mobile screens (`< md`) while preserving the high-density table view on desktop (`>= md`).
+   - **Opportunity Card Grid (`src/components/OpportunityCardGrid.tsx`)**: Refined mobile padding (`p-4 sm:p-5`), ensured minimum touch targets ($\ge 40$px) for inspection CTA and interactive triggers, and responsive font scaling.
+   - **Inspector Drawer (`src/components/LeadInspectorDrawer.tsx`)**: Configured full-width mobile slide-over (`w-full sm:max-w-xl`), 4-column segmented outreach tabs (`grid grid-cols-4 sm:flex`), and responsive bottom action bar with touch-friendly triage status selector and WhatsApp trigger.
+   - **Dashboard Container (`src/components/DashboardClient.tsx`)**: Optimized outer padding (`p-3 sm:p-6 space-y-3.5 sm:space-y-5`), made active market tabs horizontally scrollable with delete triggers, and made deletion/clear-all dialogs responsive on mobile (`w-[calc(100%-2rem)] max-w-md`).
+
+### Empirical Verification & Audit Log
+
+Exact commands run and verified:
+- `npm run lint` (`tsc --noEmit`): Clean (0 errors).
+- `DATABASE_URL=./lead_engine.db npm run build`: Clean Next.js 15 production build with optimized static routes and shared bundles (0 errors).
+- `npm test`: **131 passed** across **27 test suites** (0 failures).
+- `npx playwright test`: **10 passed** across Desktop Chromium and Mobile Chrome (Pixel 7) device profiles covering all routes (`/`, `/api/scans`, `/api/audit/direct`, `/api/discovery/suggestions`, `/api/leads/export`).
+
+
+---
+
 ## [AD-038] UI Audit Remediation, Radix Accessibility, Atmospheric Wallpaper, and Outreach Copy Honesty Alignment
 
 - **Date**: 2026-09-05

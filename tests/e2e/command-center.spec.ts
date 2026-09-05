@@ -71,4 +71,28 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     const text = await res.text();
     expect(text).toContain("Total Score,Business Name,Category");
   });
+
+  test("Discovery Suggestions API responds publicly with 200 without authentication noise", async ({ request }) => {
+    const res = await request.get("/api/discovery/suggestions?location=Mumbai");
+    expect(res.status()).toBe(200);
+    const data = await res.json();
+    expect(Array.isArray(data.suggestions)).toBe(true);
+    expect(data.suggestions.length).toBeGreaterThan(0);
+  });
+
+  test("Mobile responsive layout: No horizontal page overflow, clean touch UI", async ({ page }) => {
+    await page.goto("/");
+    await unlockWorkstationIfNeeded(page);
+
+    // Verify viewport and body width
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth + 1); // 1px tolerance for fractional subpixels
+
+    // Header brand visible
+    await expect(page.locator("h1")).toBeVisible();
+
+    // Fast search input visible
+    await expect(page.locator("input[placeholder*='Search opportunity']")).toBeVisible();
+  });
 });

@@ -43,7 +43,7 @@ export function OpportunityCardGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
       {leads.map((lead) => {
         const isSelected = selectedLeadId === lead.id;
         const telemetry = (lead.auditTelemetry as any) || null;
@@ -62,19 +62,19 @@ export function OpportunityCardGrid({
                 onSelectLead(lead);
               }
             }}
-            className={`card-surface p-5 hover:-translate-y-1.5 hover:shadow-2xl hover:border-indigo-500/40 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all duration-300 flex flex-col justify-between cursor-pointer group relative ${
+            className={`card-surface p-4 sm:p-5 hover:-translate-y-1 sm:hover:-translate-y-1.5 hover:shadow-2xl hover:border-indigo-500/40 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all duration-300 flex flex-col justify-between cursor-pointer group relative min-h-[220px] ${
               isSelected ? "border-indigo-500 bg-[#0F1422]" : ""
             }`}
           >
             <div>
               {/* Card Top: Score + Opportunity Badge */}
-              <div className="flex items-start justify-between gap-3 mb-3.5">
+              <div className="flex items-start justify-between gap-2.5 sm:gap-3 mb-3 sm:mb-3.5">
                 <OpportunityBadge lead={lead} />
                 <ScoreGauge score={lead.totalLeadScore ?? 0} size="sm" />
               </div>
 
               {/* Business Name & Niche */}
-              <h3 className="font-bold text-slate-100 text-sm group-hover:text-indigo-300 transition line-clamp-1">
+              <h3 className="font-bold text-slate-100 text-sm sm:text-base group-hover:text-indigo-300 transition line-clamp-1">
                 {lead.name}
               </h3>
               <p className="text-xs text-slate-400 mt-0.5 line-clamp-1">
@@ -82,7 +82,7 @@ export function OpportunityCardGrid({
               </p>
 
               {/* Reputation Strip */}
-              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/[0.06] text-xs font-mono">
+              <div className="flex items-center gap-2 mt-2.5 sm:mt-3 pt-2.5 sm:pt-3 border-t border-white/[0.06] text-xs font-mono">
                 {typeof lead.rating === "number" && lead.rating !== null && typeof lead.reviewCount === "number" && lead.reviewCount !== null ? (
                   <>
                     <span className="text-amber-400 font-bold flex items-center gap-0.5">
@@ -103,7 +103,7 @@ export function OpportunityCardGrid({
               </div>
 
               {/* Technical Presence / Audit Checklist Pills */}
-              <div className="mt-3 space-y-1.5 text-xs">
+              <div className="mt-2.5 sm:mt-3 space-y-1.5 text-xs">
                 {lead.isGbpDisconnected && lead.unlinkedWebsiteUrl ? (
                   <div className="flex items-center gap-1.5 text-purple-300 font-mono text-[11px] truncate">
                     <Unlink className="w-3 h-3 shrink-0" />
@@ -123,7 +123,7 @@ export function OpportunityCardGrid({
 
                 {/* Micro-Audit Badges */}
                 {telemetry && (
-                  <div className="flex flex-wrap gap-1.5 text-[10px] font-mono pt-1">
+                  <div className="flex flex-wrap gap-1 sm:gap-1.5 text-[10px] font-mono pt-1">
                     {telemetry.hasSsl ? (
                       <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1">
                         <ShieldCheck className="w-2.5 h-2.5" /> HTTPS
@@ -155,9 +155,9 @@ export function OpportunityCardGrid({
             </div>
 
             {/* Card Bottom: Triage Stage & CTA Button */}
-            <div className="mt-4 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+            <div className="mt-3.5 sm:mt-4 pt-2.5 sm:pt-3 border-t border-white/[0.06] flex items-center justify-between gap-2">
               <span
-                className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold ${
+                className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 ${
                   lead.humanStatus === "READY_FOR_OUTREACH"
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                     : lead.humanStatus === "REVIEWED"
@@ -176,7 +176,7 @@ export function OpportunityCardGrid({
                   e.stopPropagation();
                   onSelectLead(lead);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-white/[0.04] group-hover:bg-indigo-600 group-hover:text-white border border-white/[0.08] text-slate-300 text-xs font-medium transition cursor-pointer active:scale-[0.98]"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] group-hover:bg-indigo-600 group-hover:text-white border border-white/[0.08] text-slate-300 text-xs font-medium transition cursor-pointer active:scale-[0.98] min-h-[36px]"
               >
                 <span>Inspect Dossier</span>
                 <ChevronRight className="w-3.5 h-3.5" />

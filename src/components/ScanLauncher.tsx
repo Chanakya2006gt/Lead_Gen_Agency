@@ -377,10 +377,10 @@ export function ScanLauncher({
         <div>
           {/* Dynamic Market-Aware Suggestions */}
           {marketSuggestions.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 text-xs mb-3">
-              <span className="text-[11px] text-slate-400 mr-1 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-indigo-400" />
-                <span>Suggested Industries:</span>
+            <div className="overflow-x-auto no-scrollbar flex items-center gap-1.5 text-xs mb-3 pb-1 -mx-1 px-1">
+              <span className="text-[11px] text-slate-400 mr-1 flex items-center gap-1 shrink-0">
+                <Sparkles className="w-3 h-3 text-indigo-400 shrink-0" />
+                <span>Suggested:</span>
               </span>
               {marketSuggestions.map((s, idx) => (
                 <button
@@ -391,7 +391,7 @@ export function ScanLauncher({
                     setNiche(s.label);
                     setShowDropdown(false);
                   }}
-                  className={`px-2.5 py-1 rounded-md text-xs transition cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-2.5 py-1 rounded-md text-xs transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
                     niche === s.label
                       ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/40"
                       : "bg-white/[0.03] hover:bg-white/[0.07] text-slate-400 hover:text-slate-200 border border-white/[0.06]"
@@ -406,10 +406,10 @@ export function ScanLauncher({
           <form
             id="scan-launcher-form"
             onSubmit={handleDiscoverySubmit}
-            className="grid grid-cols-1 md:grid-cols-12 gap-3"
+            className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2.5 sm:gap-3"
           >
             {/* Niche Input */}
-            <div className="md:col-span-3">
+            <div className="sm:col-span-2 md:col-span-3">
               <label htmlFor="discovery-niche-input" className="block text-[11px] text-slate-400 font-medium mb-1">
                 Target Industry / Niche
               </label>
@@ -425,7 +425,7 @@ export function ScanLauncher({
             </div>
 
             {/* Target City */}
-            <div className="md:col-span-3 relative" ref={dropdownRef}>
+            <div className="sm:col-span-2 md:col-span-3 relative" ref={dropdownRef}>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-[11px] text-slate-400 font-medium">
                   Target Market / City
@@ -497,7 +497,7 @@ export function ScanLauncher({
             </div>
 
             {/* Radius Selector */}
-            <div className="md:col-span-2">
+            <div className="col-span-1 md:col-span-2">
               <label className="block text-[11px] text-slate-400 font-medium mb-1">
                 Radius
               </label>
@@ -520,7 +520,7 @@ export function ScanLauncher({
             </div>
 
             {/* Discovery Mode Selector */}
-            <div className="md:col-span-2">
+            <div className="col-span-1 md:col-span-2">
               <label className="block text-[11px] text-slate-400 font-medium mb-1">
                 Discovery Mode
               </label>
@@ -536,7 +536,7 @@ export function ScanLauncher({
             </div>
 
             {/* Engine Selector */}
-            <div className="md:col-span-2">
+            <div className="sm:col-span-2 md:col-span-2">
               <label className="block text-[11px] text-slate-400 font-medium mb-1">
                 Provider
               </label>
@@ -556,7 +556,7 @@ export function ScanLauncher({
             </div>
 
             {/* Submit & Action Controls */}
-            <div className="md:col-span-12 flex items-center justify-end gap-2 mt-1">
+            <div className="sm:col-span-2 md:col-span-12 flex items-center justify-end gap-2 mt-1">
               {isLoading ? (
                 <div className="flex items-center gap-1.5 w-full sm:w-auto">
                   <button
@@ -584,7 +584,7 @@ export function ScanLauncher({
                   data-testid="btn-launch-discovery"
                   type="submit"
                   disabled={isLoading}
-                  className="w-full sm:w-auto py-2 px-6 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-indigo-900/30 disabled:opacity-50"
+                  className="w-full sm:w-auto py-2.5 sm:py-2 px-6 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:scale-[0.98] text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-indigo-900/30 disabled:opacity-50 min-h-[42px] sm:min-h-0"
                 >
                   <Search className="w-3.5 h-3.5" />
                   <span>Scan Market</span>
@@ -597,9 +597,9 @@ export function ScanLauncher({
 
       {/* MODE 2: Instant Single URL Teardown Form */}
       {activeMode === "direct" && (
-        <form onSubmit={handleDirectAuditSubmit} className="grid grid-cols-1 md:grid-cols-12 gap-3">
+        <form onSubmit={handleDirectAuditSubmit} className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-2.5 sm:gap-3">
           {/* Target Website URL */}
-          <div className="md:col-span-5">
+          <div className="sm:col-span-2 md:col-span-5">
             <label className="block text-[11px] text-slate-400 font-medium mb-1 flex items-center gap-1">
               <Globe className="w-3 h-3 text-emerald-400" />
               <span>Target Website URL</span>
@@ -615,7 +615,7 @@ export function ScanLauncher({
           </div>
 
           {/* Optional Business Name */}
-          <div className="md:col-span-3">
+          <div className="col-span-1 md:col-span-3">
             <label className="block text-[11px] text-slate-400 font-medium mb-1">
               Business Name (Optional)
             </label>
@@ -629,7 +629,7 @@ export function ScanLauncher({
           </div>
 
           {/* Optional Category */}
-          <div className="md:col-span-2">
+          <div className="col-span-1 md:col-span-2">
             <label className="block text-[11px] text-slate-400 font-medium mb-1">
               Category
             </label>
@@ -637,17 +637,17 @@ export function ScanLauncher({
               type="text"
               value={directCategory}
               onChange={(e) => setDirectCategory(e.target.value)}
-              placeholder="Auto-detected if empty (e.g. Dental Clinic)"
+              placeholder="Auto-detected if empty"
               className="w-full px-3.5 py-2 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-100 text-xs focus:outline-none focus:border-emerald-400 transition"
             />
           </div>
 
           {/* Submit Button */}
-          <div className="md:col-span-2 flex items-end">
+          <div className="sm:col-span-2 md:col-span-2 flex items-end">
             <button
               type="submit"
               disabled={isAuditingDirect || !directUrl.trim()}
-              className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-emerald-900/20 disabled:opacity-50"
+              className="w-full py-2.5 sm:py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-emerald-900/20 disabled:opacity-50 min-h-[40px] sm:min-h-0"
             >
               {isAuditingDirect ? (
                 <>

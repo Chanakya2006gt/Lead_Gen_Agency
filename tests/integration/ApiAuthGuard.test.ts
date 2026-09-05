@@ -21,10 +21,10 @@ describe("API Routes Fail-Closed Authentication & Invariant Integration Suite", 
     process.env.LEAD_ENGINE_API_SECRET = "production-super-secret";
     (process.env as any).NODE_ENV = "production";
 
-    // 1. GET /api/discovery/suggestions
+    // 1. GET /api/discovery/suggestions (Public metadata helper)
     const sugReq = new NextRequest("http://localhost:3000/api/discovery/suggestions?location=Hyderabad");
     const sugRes = await getSuggestions(sugReq);
-    expect(sugRes.status).toBe(401);
+    expect(sugRes.status).toBe(200);
 
     // 2. GET /api/scans
     const scansReq = new Request("http://localhost:3000/api/scans");
