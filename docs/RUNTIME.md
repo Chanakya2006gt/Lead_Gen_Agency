@@ -52,5 +52,5 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ## 4. Pipeline Lifecycle & Process Resilience
 
 1. **Process Restart Recovery**: On startup, any scan marked as `RUNNING` is automatically transitioned to `FAILED` (process restarted), preventing orphaned locks.
-2. **Cancellation**: In-flight scans can be stopped via the UI or `POST /api/scans/:id/cancel`. Abort signals immediately halt active browser contexts and database writes.
+2. **Cancellation**: In-flight scans can be stopped via the UI or `POST /api/scans/:id/cancel`. Abort signals notify the active pipeline controller; subsequent candidate processing, audit jobs, and database writes halt immediately, and the scan status transitions to `CANCELLED`.
 3. **Fail-Closed Security**: Unauthenticated requests are rejected with `401 Unauthorized` unless `ALLOW_INSECURE_LOCAL_AUTH=true` in local development.

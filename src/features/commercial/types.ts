@@ -15,6 +15,16 @@ export type AbilityToPay =
   | "HIGH"
   | "UNKNOWN";
 
+/**
+ * Commercial pursuit recommendation derived from economic profiling (commercial window,
+ * problem value, ability to pay).
+ *
+ * Mapped to the unified domain LeadDisposition in QualificationEngine:
+ * - PURSUE -> PURSUE
+ * - PURSUE_LOW_TOUCH -> PURSUE_LOW_TOUCH
+ * - NURTURE -> NURTURE
+ * - DO_NOT_PURSUE -> NOT_A_FIT | INSUFFICIENT_EVIDENCE
+ */
 export type PursuitDecision =
   | "PURSUE"
   | "PURSUE_LOW_TOUCH"

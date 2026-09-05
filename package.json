@@ -1,7 +1,7 @@
 {
   "name": "lead-gen-agency",
   "version": "1.0.0",
-  "private": false,
+  "private": true,
   "description": "High-conviction client discovery, qualification, and automated technical auditing engine for local operating businesses.",
   "author": "Chanakya2006gt",
   "repository": {

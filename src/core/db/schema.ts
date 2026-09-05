@@ -60,6 +60,9 @@ export type GoogleEvidence =
       retrievedAt?: string;
     };
 
+import type { QualificationResult } from "@/features/qualification/QualificationEngine";
+export type { QualificationResult };
+
 export interface BusinessDossier {
   reputationScore: number;
   digitalGapScore: number;
@@ -94,7 +97,7 @@ export interface BusinessDossier {
   };
   executiveSummary: string;
   commercialProfile?: CommercialProfile;
-  qualification?: any;
+  qualification?: QualificationResult;
 }
 
 // =========================================================================

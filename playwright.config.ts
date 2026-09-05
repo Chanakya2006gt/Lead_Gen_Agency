@@ -25,6 +25,7 @@ export default defineConfig({
     env: {
       PORT: "3098",
       ALLOW_INSECURE_LOCAL_AUTH: "true",
+      DATABASE_URL: "./lead_engine.db",
     },
   },
 });

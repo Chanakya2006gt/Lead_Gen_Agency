@@ -37,12 +37,12 @@ src/
 │   │   └── mockServer.ts            # Embedded simulation server for integration tests
 │   │
 │   ├── qualification/               # Evidence-Driven Qualification & Relevance
-│   │   ├── UniversalFilterService.ts # Rating >= 4.0, Reviews >= 50, Recency velocity
-│   │   ├── ScoringEngine.ts         # Weighted heuristic: Reputation, Gap, Opportunity, Confidence
+│   │   ├── UniversalFilterService.ts # Initial discovery gating (rating, reviews, recency velocity)
+│   │   ├── ReviewVelocityLedger.ts  # Longitudinal review trend derivation via lead_observations
+│   │   ├── ScoringEngine.ts         # Multi-dimensional score calculation (Reputation, Gap, Opp, Confidence)
 │   │   ├── CustomerJourneyDetector.ts # Empirical acquisition funnels (Sign-up, RFQ, Book, Visit, Call)
-│   │   ├── OpportunityRelevanceEngine.ts # Business-model aware opportunity evaluation
-│   │   ├── OpportunityClassifier.ts # Tier lookup table (WEBSITE, AUTOMATION, CUSTOM_SOFTWARE)
-│   │   └── QualificationEngine.ts   # First-class lead disposition (PURSUE, NOT_A_FIT, INSUFFICIENT_EVIDENCE)
+│   │   ├── OpportunityRelevanceEngine.ts # Business-model aware opportunity evaluation & tier scoping
+│   │   └── QualificationEngine.ts   # Unified lead disposition brain (PURSUE, NOT_A_FIT, INSUFFICIENT_EVIDENCE)
 │   │
 │   ├── commercial/                  # Market Context & Economic Profiling
 │   │   ├── BusinessModelClassifier.ts # Maps 7 operating models (SaaS, Ecommerce, Industrial, Clinic, etc.)

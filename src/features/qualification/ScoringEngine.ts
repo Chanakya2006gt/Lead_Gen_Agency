@@ -33,10 +33,10 @@ export class ScoringEngine {
       return 50; // Neutral baseline for unverified Google entity
     }
 
-    // Rating Score (0 to 50 pts): Maps 4.0 -> 30 pts, 5.0 -> 50 pts
+    // Rating Score (0 to 50 pts): Linear mapping from 3.5 (0 pts) to 5.0 (50 pts)
     const ratingScore = Math.min(50, Math.max(0, ((rating - 3.5) / 1.5) * 50));
 
-    // Volume Score (0 to 30 pts): Log scale on reviews (50 -> 10 pts, 500+ -> 30 pts)
+    // Volume Score (0 to 30 pts): Log scale on reviews (10 -> ~11 pts, 50 -> ~19 pts, 500+ -> 30 pts)
     const volumeScore = Math.min(
       30,
       (Math.log10(Math.max(10, reviewCount)) / Math.log10(500)) * 30

@@ -142,3 +142,59 @@ Re-aligned `Lead_Gen_Agency` as a high-security, **local-first, single-operator 
 - `npm run test` — 26 test files passed, 119 tests passed (100% green).
 - `npm run test:e2e` — 3 Playwright browser e2e tests passed cleanly (Lock screen, live audit, CSV export).
 - `npm run build` — Clean production build with optimized static and dynamic bundles.
+
+---
+
+## [AD-037] Remediation & Workstation Contract Realization (Phases 1, 2 & 3)
+
+- **Date**: 2026-09-05
+- **Status**: Implemented & Verified
+- **Driver**: Claude Opus 4.8 Remediation Implementation Plan based on empirical codebase audit (`AUDIT_REPORT.md`).
+
+### Context & Problem
+The system audit identified several critical discrepancies between domain assertions and reality:
+1. Universal filter claimed to calculate 90-day review recency velocity, but single Google Places discovery pulls only return 5 relevance-sorted reviews, making single-snapshot velocity statistically unsound.
+2. Apify and Outscraper adapters fabricated current timestamps when reviews lacked date metadata.
+3. Database migration errors on startup silently masked non-duplicate column errors.
+4. CSP `connect-src` permitted blanket `http: https:`, and SSRF documentation claimed absolute IP isolation despite Playwright headless browser TOCTOU limitations.
+5. Inconsistencies existed in opportunity classification documentation, qualification field typing on `BusinessDossier`, redundant synthetic checks in guardrails, and repo privacy.
+
+### Key Architectural Changes & Decisions
+
+1. **Longitudinal Review Velocity Ledger (`ReviewVelocityLedger.ts`)**:
+   - `UniversalFilterService.evaluate()` returns `reviewTrend: "UNKNOWN"` on single pulls without fabricating 90-day growth.
+   - `ScanPipelineService` now compares historical records from `lead_observations` table to compute true empirical review velocity across repeated scans.
+   - `DossierSynthesizer` assigns `"longitudinal"` provenance only when `>=2` distinct observations exist over time.
+
+2. **Honest Review Timestamps in Third-Party Adapters**:
+   - `ApifyMapsAdapter` and `OutscraperAdapter` discard reviews with missing dates rather than synthesizing `new Date().toISOString()`.
+
+3. **Fail-Loud Migration Handler (`src/core/db/index.ts`)**:
+   - Catch block inspects SQLite error messages and only ignores duplicate column errors (`duplicate column name`). All other SQL syntax/integrity errors are logged and rethrown.
+
+4. **Honest SSRF Threat Model & Tightened Content Security Policy**:
+   - `SECURITY.md` and `DECISION_LOG.md` AD-011 updated with realistic SSRF posture under the single-operator workstation model (pre-DNS checks, post-navigation target URL revalidation, and acknowledged local DNS-rebinding residual risk).
+   - `next.config.ts` tightened `connect-src` to `'self' https://nominatim.openstreetmap.org` and restricted `'unsafe-eval'` in `script-src` to development mode only.
+
+5. **Persistence Boundary & Schema Single Source (`src/core/db/schema.ts`)**:
+   - `BusinessDossier` strongly types `qualification?: QualificationResult;`.
+   - Verified single-source `LeadDisposition` (`"PURSUE" | "PURSUE_LOW_TOUCH" | "NURTURE" | "NOT_A_FIT" | "INSUFFICIENT_EVIDENCE"`).
+
+6. **Guardrail Simplification & Formula Documentation Alignment**:
+   - Simplified `assertNoSyntheticProviderData` in `Guardrails.ts` to cleanly reject any unverified lead containing numeric ratings.
+   - Corrected comments in `ScoringEngine.ts` to match the exact mathematical implementations for linear rating mapping and logarithmic review volume scaling.
+   - Documented explicit relationship between commercial `PursuitDecision` and unified `LeadDisposition` in `src/features/commercial/types.ts`.
+
+7. **Documentation & Repo Hygiene**:
+   - Set `"private": true` in `package.json`.
+   - Updated `ARCHITECTURE.md` to reflect `ReviewVelocityLedger.ts` and document the consolidation of opportunity classification into `OpportunityRelevanceEngine` and `QualificationEngine`.
+   - Updated `docs/RUNTIME.md` §4.2 to document explicit cancellation semantics.
+   - Verified that `playwright.config.ts` provides explicit `DATABASE_URL: "./lead_engine.db"`.
+
+### Empirical Verification & Audit Results
+
+Commands executed:
+- `npm run lint` — 0 TypeScript errors (`tsc --noEmit` clean).
+- `npm test` — **131 tests passed** across **27 test suites** (100% green).
+- `DATABASE_URL=./lead_engine.db npm run build` — Clean production Next.js build.
+- `npm run test:e2e` — 3 Playwright browser e2e tests passed (routes: `/`, `/api/scans`, `/api/audit/direct`, `/api/discovery/suggestions`, `/api/leads/export`).

@@ -76,11 +76,10 @@ export class Guardrails {
   }
 
   /**
-   * Asserts that no synthetic placeholder numbers (e.g. fake 4.8 / 120 defaults) entered the lead object.
+   * Asserts that no synthetic placeholder numbers entered the lead object.
    */
   public static assertNoSyntheticProviderData(lead: Partial<Lead>): void {
-    if ((lead.rating === 4.8 && lead.reviewCount === 120 && lead.ratingSource === "UNVERIFIED") ||
-        (lead.rating !== null && lead.ratingSource === "UNVERIFIED")) {
+    if (lead.rating !== null && lead.rating !== undefined && lead.ratingSource === "UNVERIFIED") {
       throw new DomainIntegrityViolationError(
         "SYNTHETIC_PROVIDER_DATA",
         "Unverified lead cannot contain synthetic rating numbers."
