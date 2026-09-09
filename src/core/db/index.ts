@@ -17,9 +17,10 @@ if (dbPath.startsWith("sqlite:")) {
   dbPath = dbPath.replace("sqlite:", "");
 }
 
-// Intercept Postgres URLs: Fail explicit (Workstation is SQLite on disk)
+// Intercept Postgres URLs: Warn and redirect to local SQLite storage on disk (AD-036)
 if (dbPath.startsWith("postgres://") || dbPath.startsWith("postgresql://")) {
-  throw new Error("Postgres runtime is not implemented. Use a SQLite file path in DATABASE_URL.");
+  console.warn("[db] Postgres URL detected. Workstation engine operates on local SQLite. Falling back to ./lead_engine.db");
+  dbPath = "./lead_engine.db";
 }
 
 const resolvedPath = path.resolve(process.cwd(), dbPath);

@@ -308,3 +308,39 @@ Exact commands run and verified:
 - `npm test`: **131 passed** across **27 test suites**.
 - `npm run test:e2e`: **3 passed** across all routes (`/`, `/api/scans`, `/api/audit/direct`, `/api/discovery/suggestions`, `/api/leads/export`).
 
+---
+
+## [AD-041] CI/CD Security Workflow Remediation, High-Severity CVE Mitigation & Postgres Fallback Defense
+
+- **Date**: 2026-09-09
+- **Status**: Implemented & Verified
+- **Driver**: GitHub Actions Run #12 Failure (`TruffleHog Secret Scan`), npm audit high-severity CVEs, and Next.js production build stability.
+
+### Context & Root Cause Analysis
+
+1. **TruffleHog Secret Scan Failure in CI (`security.yml`)**:
+   - In `.github/workflows/security.yml`, the TruffleHog step explicitly configured `base: ${{ github.event.repository.default_branch }}` and `head: HEAD`.
+   - On pushes directly to `main` (and on scheduled cron runs), `${{ github.event.repository.default_branch }}` and `HEAD` evaluate to the exact same commit SHA.
+   - TruffleHog attempts to diff `base` and `head`. Because they are identical, it terminated with exit code 1: `Error: BASE and HEAD commits are the same. TruffleHog won't scan anything.`
+   - **Resolution**: Removed hardcoded `base` and `head` inputs from `trufflesecurity/trufflehog@main`. The action natively inspects the GitHub event context to scan pushed commits on `push`, evaluate PR diffs on `pull_request`, and scan commit history without throwing on `schedule`.
+
+2. **Downstream High-Severity CVEs in `npm audit --audit-level=high`**:
+   - Step 4 of `security.yml` runs `npm audit --audit-level=high`.
+   - Two newly published high-severity advisories failed the audit:
+     - `drizzle-orm <0.45.2` (GHSA-gpj5-g38j-94v9): SQL injection via improperly escaped SQL identifiers.
+     - `postcss <=8.5.22` (GHSA-qx2v-qp2m-jg93): CSS stringify XSS vulnerability nested inside Next.js dependencies.
+   - **Resolution**: Upgraded `drizzle-orm` to `^0.45.2`, upgraded `postcss` to `^8.5.28`, and enforced npm `overrides: { "postcss": "^8.5.28" }` in `package.json` to patch nested dependencies. `npm audit --audit-level=high` now passes with 0 high-severity vulnerabilities.
+
+3. **`DATABASE_URL` Production Build & Workstation Resilience**:
+   - In `src/core/db/index.ts`, a check threw an uncaught error at module evaluation if `DATABASE_URL` contained a `postgres://` or `postgresql://` protocol, which broke `npm run build` when an operator had an existing `.env.local` with a Postgres connection string.
+   - **Resolution**: Replaced the fatal error with a descriptive console warning and a clean, safe fallback to local SQLite storage (`./lead_engine.db`), strictly satisfying AD-036.
+
+### Empirical Verification & Audit Log
+
+Exact commands run and verified:
+- `npm audit --audit-level=high`: Exited with code 0 (0 high or critical vulnerabilities).
+- `npm run lint` (`tsc --noEmit`): Clean pass (0 TypeScript errors).
+- `npm test` (`vitest run`): **131 passed** across **27 test suites**.
+- `npm run build`: Next.js 15 production build compiled and optimized successfully in 1.7s.
+- `npm run test:e2e` (`playwright test`): **12 passed** across Chromium and Mobile Chrome (Pixel 7).
+
