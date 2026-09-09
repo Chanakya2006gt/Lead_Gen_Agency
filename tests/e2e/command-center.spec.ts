@@ -11,6 +11,21 @@ async function unlockWorkstationIfNeeded(page: any) {
   }
 }
 
+async function switchToDirectTeardownTab(page: any) {
+  const directTab = page.locator('[data-testid="btn-instant-teardown-tab"]').or(page.locator("button:has-text('Instant URL Teardown')"));
+  const urlInput = page.locator('[data-testid="input-direct-url"]').or(page.locator("input[placeholder*='sowjanyadental.com']"));
+
+  await expect(directTab).toBeVisible({ timeout: 15000 });
+
+  // Retry clicking until the direct teardown input becomes visible (guards against React hydration race conditions)
+  await expect(async () => {
+    await directTab.click();
+    await expect(urlInput).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 20000, intervals: [400, 800, 1500] });
+
+  return urlInput;
+}
+
 test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
   test("Dashboard loads with clean security headers and unlocks with workstation secret", async ({ page }) => {
     const response = await page.goto("/");
@@ -44,16 +59,10 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     await unlockWorkstationIfNeeded(page);
 
     // Switch to Instant URL Teardown Mode
-    const directTab = page.locator("button:has-text('Instant URL Teardown')");
-    await expect(directTab).toBeVisible({ timeout: 15000 });
-    await directTab.click({ force: true });
-
-    // Fill direct audit form
-    const urlInput = page.locator("input[placeholder*='sowjanyadental.com']");
-    await expect(urlInput).toBeVisible();
+    const urlInput = await switchToDirectTeardownTab(page);
     await urlInput.fill("https://trelio.in");
 
-    const auditBtn = page.locator("button:has-text('Run Teardown')");
+    const auditBtn = page.locator('[data-testid="btn-run-teardown"]').or(page.locator("button:has-text('Run Teardown')"));
     await expect(auditBtn).toBeEnabled();
     await auditBtn.click();
 
@@ -107,14 +116,11 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
     await unlockWorkstationIfNeeded(page);
 
     // Switch to Instant URL Teardown Mode
-    const directTab = page.locator("button:has-text('Instant URL Teardown')");
-    await expect(directTab).toBeVisible({ timeout: 15000 });
-    await directTab.click({ force: true });
-
-    // Trigger instant teardown to open the drawer
-    const urlInput = page.locator("input[placeholder*='sowjanyadental.com']");
+    const urlInput = await switchToDirectTeardownTab(page);
     await urlInput.fill("https://trelio.in");
-    await page.locator("button:has-text('Run Teardown')").click();
+    
+    const auditBtn = page.locator('[data-testid="btn-run-teardown"]').or(page.locator("button:has-text('Run Teardown')"));
+    await auditBtn.click();
 
     // Verify dialog role and aria-modal on Radix dialog content
     const dialog = page.locator('[role="dialog"]');

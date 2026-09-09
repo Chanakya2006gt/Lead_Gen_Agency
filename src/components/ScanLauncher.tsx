@@ -343,6 +343,7 @@ export function ScanLauncher({
           </button>
 
           <button
+            data-testid="btn-instant-teardown-tab"
             type="button"
             onClick={() => {
               setActiveMode("direct");
@@ -605,6 +606,7 @@ export function ScanLauncher({
               <span>Target Website URL</span>
             </label>
             <input
+              data-testid="input-direct-url"
               type="text"
               value={directUrl}
               onChange={(e) => setDirectUrl(e.target.value)}
@@ -645,6 +647,7 @@ export function ScanLauncher({
           {/* Submit Button */}
           <div className="sm:col-span-2 md:col-span-2 flex items-end">
             <button
+              data-testid="btn-run-teardown"
               type="submit"
               disabled={isAuditingDirect || !directUrl.trim()}
               className="w-full py-2.5 sm:py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition cursor-pointer shadow-lg shadow-emerald-900/20 disabled:opacity-50 min-h-[40px] sm:min-h-0"

@@ -375,6 +375,30 @@ Exact commands run and verified:
 Exact commands run and verified:
 - `npm run lint` (`tsc --noEmit`): Clean pass (0 errors).
 - `npm test` (`vitest run`): **131 passed** across **27 test suites**.
-- `npm run build`: Clean Next.js 15 production build.
 - `npm run test:e2e` (`playwright test`): **12 passed** across Chromium and Mobile Chrome (Pixel 7) in 49.4s.
+
+---
+
+## [AD-043] E2E Tab Hydration Resilience & TestID Telemetry Alignment
+
+- **Date**: 2026-09-09
+- **Status**: Implemented & Verified
+- **Driver**: GitHub Actions CI Run #13 E2E test failures in tests 2, 6, 8, and 12 (`locator('input[placeholder*=\'sowjanyadental.com\']')`).
+
+### Context & Root Cause Analysis
+
+1. **React Client Hydration Race in E2E Tab Switching (`command-center.spec.ts`)**:
+   - In `tests/e2e/command-center.spec.ts`, tests 2, 6, 8, and 12 switched modes using `await directTab.click({ force: true })`.
+   - On GitHub Actions CI runners, SSR HTML renders the `<button>Instant URL Teardown</button>` into the DOM immediately. Playwright sees the button visible and executes `click({ force: true })` before React has finished hydrating client-side event listeners.
+   - The click fired on a dead DOM node with no attached `onClick` handler; `activeMode` stayed `"discovery"`, the teardown input `input[placeholder*='sowjanyadental.com']` was never rendered into the DOM, and the locator timed out after 5,000ms (in test 2/8) or 90,000ms (in test 6/12).
+   - **Resolution**: Created `switchToDirectTeardownTab(page)` using Playwright's `expect(async () => { await directTab.click(); await expect(urlInput).toBeVisible({ timeout: 2000 }); }).toPass({ timeout: 20000 })`. This automatically retries clicking until React has hydrated and the input appears, eliminating the hydration race condition.
+
+2. **Component Testability Instrumentation (`ScanLauncher.tsx`)**:
+   - Added explicit `data-testid` attributes (`btn-instant-teardown-tab`, `input-direct-url`, `btn-run-teardown`) while preserving fallback CSS text and placeholder selectors.
+
+### Empirical Verification & Audit Log
+
+Exact commands run and verified:
+- `npm run lint` (`tsc --noEmit`): Clean pass (0 errors).
+- `npm run test:e2e` (`playwright test`): **12 passed** (all 12 tests across Chromium and Mobile Chrome in 51.2s).
 
