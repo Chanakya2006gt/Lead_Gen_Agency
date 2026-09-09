@@ -8,6 +8,9 @@ export default defineConfig({
   use: {
     baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || "http://localhost:3098",
     trace: "on-first-retry",
+    launchOptions: {
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    },
   },
   projects: [
     {
@@ -29,7 +32,9 @@ export default defineConfig({
     env: {
       PORT: "3098",
       ALLOW_INSECURE_LOCAL_AUTH: "true",
-      DATABASE_URL: "./lead_engine.db",
+      DATABASE_URL: process.env.DATABASE_URL || "./lead_engine.db",
+      LEAD_ENGINE_API_SECRET: process.env.LEAD_ENGINE_API_SECRET || "",
+      PLAYWRIGHT_NO_SANDBOX: "true",
     },
   },
 });

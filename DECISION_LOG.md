@@ -344,3 +344,37 @@ Exact commands run and verified:
 - `npm run build`: Next.js 15 production build compiled and optimized successfully in 1.7s.
 - `npm run test:e2e` (`playwright test`): **12 passed** across Chromium and Mobile Chrome (Pixel 7).
 
+---
+
+## [AD-042] Linux Chromium Sandbox & Playwright CI Secret Harmonization
+
+- **Date**: 2026-09-09
+- **Status**: Implemented & Verified
+- **Driver**: GitHub Actions CI Run #12 Failure in step `Run Playwright End-to-End Smoke & Quality Suite`.
+
+### Context & Root Cause Analysis
+
+1. **Linux Headless Chromium Sandbox in Sub-process (`PlaywrightAuditEngine.ts`)**:
+   - In `src/features/auditor/PlaywrightAuditEngine.ts`, `--no-sandbox` was only added if `process.env.PLAYWRIGHT_NO_SANDBOX === "1"`.
+   - In `.github/workflows/ci.yml`, the environment variable was configured as `PLAYWRIGHT_NO_SANDBOX: "true"`.
+   - On the GitHub Actions Ubuntu runner (which lacks user namespace sandbox permissions for Chromium), launching the nested headless browser during `POST /api/audit/direct` failed without `--no-sandbox`, causing the direct teardown API call to fail with 500 and the E2E drawer assertion to time out after 45 seconds.
+   - **Resolution**: Updated `PlaywrightAuditEngine.ts` to support `"1"`, `"true"`, and `Boolean(process.env.CI)`.
+
+2. **Playwright Runner Sandbox & WebServer Environment Forwarding (`playwright.config.ts`)**:
+   - In `playwright.config.ts`, `use.launchOptions` was missing `--no-sandbox`, `--disable-setuid-sandbox`, and `--disable-dev-shm-usage`.
+   - `webServer.env` did not explicitly forward `PLAYWRIGHT_NO_SANDBOX: "true"`, `DATABASE_URL`, or `LEAD_ENGINE_API_SECRET` to the Next.js test server process.
+   - **Resolution**: Configured `launchOptions` and explicitly passed `PLAYWRIGHT_NO_SANDBOX: "true"` and process environment fallbacks in `webServer.env`.
+
+3. **E2E Test Secret Harmonization (`tests/e2e/command-center.spec.ts`)**:
+   - `unlockWorkstationIfNeeded` filled hardcoded `"e2e-test-secret"`, while `ci.yml` configured `LEAD_ENGINE_API_SECRET: "ci-secret-passphrase-testing"`.
+   - CSV export test called `/api/leads/export` without authorization headers.
+   - **Resolution**: Updated `unlockWorkstationIfNeeded` to dynamically use `process.env.LEAD_ENGINE_API_SECRET || "e2e-test-secret"`, and added `x-engine-secret` header to the CSV export test request when secret is present.
+
+### Empirical Verification & Audit Log
+
+Exact commands run and verified:
+- `npm run lint` (`tsc --noEmit`): Clean pass (0 errors).
+- `npm test` (`vitest run`): **131 passed** across **27 test suites**.
+- `npm run build`: Clean Next.js 15 production build.
+- `npm run test:e2e` (`playwright test`): **12 passed** across Chromium and Mobile Chrome (Pixel 7) in 49.4s.
+

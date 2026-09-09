@@ -14,7 +14,11 @@ export class PlaywrightAuditEngine implements IAuditEngine {
         "--disable-dev-shm-usage",
         "--disable-gpu",
       ];
-      if (process.env.PLAYWRIGHT_NO_SANDBOX === "1") {
+      if (
+        process.env.PLAYWRIGHT_NO_SANDBOX === "1" ||
+        process.env.PLAYWRIGHT_NO_SANDBOX === "true" ||
+        Boolean(process.env.CI)
+      ) {
         launchArgs.push("--no-sandbox");
       }
       this.browser = await chromium.launch({
