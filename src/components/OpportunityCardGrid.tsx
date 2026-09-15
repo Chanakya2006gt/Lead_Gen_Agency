@@ -62,13 +62,13 @@ export function OpportunityCardGrid({
                 onSelectLead(lead);
               }
             }}
-            className={`card-surface p-4 sm:p-5 hover:-translate-y-1 sm:hover:-translate-y-1.5 hover:shadow-2xl hover:border-indigo-500/40 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all duration-300 flex flex-col justify-between cursor-pointer group relative min-h-[220px] ${
+            className={`card-surface p-4 sm:p-5 hover:border-indigo-500/40 hover:bg-[#0E1320] focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-all flex flex-col justify-between cursor-pointer group relative min-h-[220px] tactile-action ${
               isSelected ? "border-indigo-500 bg-[#0F1422]" : ""
             }`}
           >
             <div>
               {/* Card Top: Score + Opportunity Badge */}
-              <div className="flex items-start justify-between gap-2.5 sm:gap-3 mb-3 sm:mb-3.5">
+              <div className="flex items-start justify-between gap-2.5 sm:gap-3 mb-3">
                 <OpportunityBadge lead={lead} />
                 <ScoreGauge score={lead.totalLeadScore ?? 0} size="sm" />
               </div>
@@ -82,15 +82,15 @@ export function OpportunityCardGrid({
               </p>
 
               {/* Reputation Strip */}
-              <div className="flex items-center gap-2 mt-2.5 sm:mt-3 pt-2.5 sm:pt-3 border-t border-white/[0.06] text-xs font-mono">
+              <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-white/[0.06] text-xs font-mono">
                 {typeof lead.rating === "number" && lead.rating !== null && typeof lead.reviewCount === "number" && lead.reviewCount !== null ? (
                   <>
                     <span className="text-amber-400 font-bold flex items-center gap-0.5">
-                      <Star className="w-3 h-3 fill-amber-400" /> {lead.rating.toFixed(1)}
+                      <Star className="w-3.5 h-3.5 fill-amber-400" /> {lead.rating.toFixed(1)}
                     </span>
                     <span className="text-slate-400">({lead.reviewCount} reviews)</span>
                     {(lead.reviewCountDelta ?? 0) > 0 && (
-                      <span className="text-[10px] text-emerald-400 font-semibold ml-auto">
+                      <span className="text-[10px] text-emerald-400 font-semibold ml-auto font-mono">
                         +{lead.reviewCountDelta} gained
                       </span>
                     )}
@@ -103,16 +103,16 @@ export function OpportunityCardGrid({
               </div>
 
               {/* Technical Presence / Audit Checklist Pills */}
-              <div className="mt-2.5 sm:mt-3 space-y-1.5 text-xs">
+              <div className="mt-2.5 space-y-1.5 text-xs">
                 {lead.isGbpDisconnected && lead.unlinkedWebsiteUrl ? (
                   <div className="flex items-center gap-1.5 text-purple-300 font-mono text-[11px] truncate">
-                    <Unlink className="w-3 h-3 shrink-0" />
+                    <Unlink className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">{displayDomain}</span>
                     <span className="text-[10px] text-purple-400/80">(Unlinked)</span>
                   </div>
                 ) : lead.hasWebsite && lead.websiteUrl ? (
                   <div className="flex items-center gap-1.5 text-slate-300 font-mono text-[11px] truncate">
-                    <ExternalLink className="w-3 h-3 text-slate-500 shrink-0" />
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                     <span className="truncate">{displayDomain}</span>
                   </div>
                 ) : (
@@ -123,7 +123,7 @@ export function OpportunityCardGrid({
 
                 {/* Micro-Audit Badges */}
                 {telemetry && (
-                  <div className="flex flex-wrap gap-1 sm:gap-1.5 text-[10px] font-mono pt-1">
+                  <div className="flex flex-wrap gap-1 sm:gap-1.5 text-[10px] font-sans pt-1">
                     {telemetry.hasSsl ? (
                       <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 flex items-center gap-1">
                         <ShieldCheck className="w-2.5 h-2.5" /> HTTPS
@@ -155,15 +155,15 @@ export function OpportunityCardGrid({
             </div>
 
             {/* Card Bottom: Triage Stage & CTA Button */}
-            <div className="mt-3.5 sm:mt-4 pt-2.5 sm:pt-3 border-t border-white/[0.06] flex items-center justify-between gap-2">
+            <div className="mt-3.5 pt-2.5 border-t border-white/[0.06] flex items-center justify-between gap-2">
               <span
-                className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 ${
+                className={`px-2 py-0.5 rounded text-[10px] font-sans font-medium shrink-0 ${
                   lead.humanStatus === "READY_FOR_OUTREACH"
                     ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
                     : lead.humanStatus === "REVIEWED"
                     ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
                     : lead.humanStatus === "ARCHIVED"
-                    ? "bg-slate-800 text-slate-500"
+                    ? "bg-slate-800 text-slate-400"
                     : "bg-white/[0.04] text-slate-300 border border-white/[0.08]"
                 }`}
               >
@@ -176,7 +176,7 @@ export function OpportunityCardGrid({
                   e.stopPropagation();
                   onSelectLead(lead);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] group-hover:bg-indigo-600 group-hover:text-white border border-white/[0.08] text-slate-300 text-xs font-medium transition cursor-pointer active:scale-[0.98] min-h-[36px]"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] group-hover:bg-indigo-600 group-hover:text-white border border-white/[0.08] text-slate-200 text-xs font-medium transition cursor-pointer tactile-action min-h-[36px]"
               >
                 <span>Inspect Dossier</span>
                 <ChevronRight className="w-3.5 h-3.5" />

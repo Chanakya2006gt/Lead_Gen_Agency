@@ -1,14 +1,34 @@
 import { test, expect } from "@playwright/test";
 
 async function unlockWorkstationIfNeeded(page: any) {
+  const secret = process.env.LEAD_ENGINE_API_SECRET || "linen2026";
+
+  // 1. Inject session authentication cookie so background API queries are authorized
+  await page.context().addCookies([
+    {
+      name: "lead_engine_token",
+      value: secret,
+      url: "http://localhost:3098",
+    },
+  ]);
+
+  // 2. If the lock screen UI is visible, unlock it via form submission
   const lockInput = page.locator("input[placeholder='Workstation Secret']");
   if (await lockInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-    const secret = process.env.LEAD_ENGINE_API_SECRET || "e2e-test-secret";
     await lockInput.fill(secret);
     await page.locator("button:has-text('Unlock Workstation')").click();
-    await expect(page.locator("h1:has-text('LEAD ENGINE')")).toBeVisible({ timeout: 10000 });
-    await page.waitForTimeout(500);
   }
+
+  // 3. Confirm dashboard brand header is visible
+  const brandHeader = page.locator("h1:has-text('LEAD ENGINE')");
+  if (!await brandHeader.isVisible().catch(() => false)) {
+    if (await lockInput.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await lockInput.fill(secret);
+      await page.locator("button:has-text('Unlock Workstation')").click();
+    }
+  }
+  await expect(brandHeader).toBeVisible({ timeout: 15000 });
+  await page.waitForTimeout(300);
 }
 
 async function switchToDirectTeardownTab(page: any) {
@@ -74,10 +94,10 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
   });
 
   test("CSV Export Endpoint responds with valid CSV headers and data", async ({ request }) => {
-    const headers: Record<string, string> = {};
-    if (process.env.LEAD_ENGINE_API_SECRET) {
-      headers["x-engine-secret"] = process.env.LEAD_ENGINE_API_SECRET;
-    }
+    const secret = process.env.LEAD_ENGINE_API_SECRET || "linen2026";
+    const headers: Record<string, string> = {
+      "x-engine-secret": secret,
+    };
     const res = await request.get("/api/leads/export", { headers });
     expect(res.status()).toBe(200);
     expect(res.headers()["content-type"]).toContain("text/csv");

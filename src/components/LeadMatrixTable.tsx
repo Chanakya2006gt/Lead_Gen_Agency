@@ -104,50 +104,50 @@ export function LeadMatrixTable({
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-3 sm:top-2.5" />
           </div>
 
-          {/* Interactive Filter Pills (Horizontally Scrollable on Mobile) */}
-          <div className="flex items-center gap-1.5 text-xs font-mono overflow-x-auto no-scrollbar py-0.5 whitespace-nowrap -mx-1 px-1">
+          {/* Interactive Filter Pills (Horizontally Scrollable on Mobile with Smooth Momentum) */}
+          <div className="flex items-center gap-1.5 text-xs font-sans overflow-x-auto no-scrollbar py-1 whitespace-nowrap -mx-1 px-1">
             <button
               type="button"
               onClick={() => setOpportunityFilter("ALL")}
               aria-label={`Show all ${counts.all} opportunities`}
-              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] sm:min-h-0 ${
+              className={`px-3 py-1.5 rounded-lg tactile-action cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[36px] sm:min-h-0 text-xs font-medium ${
                 opportunityFilter === "ALL"
-                  ? "bg-indigo-600 text-white font-bold shadow-sm"
+                  ? "bg-indigo-600 text-white font-semibold shadow-sm"
                   : "bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-white border border-white/[0.08]"
               }`}
             >
               <span>All</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-white/10 text-[10px]">{counts.all}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-white/10 font-mono text-[10px]">{counts.all}</span>
             </button>
 
             <button
               type="button"
               onClick={() => setOpportunityFilter("DISCONNECTED_GBP_WEBSITE")}
               aria-label={`Show ${counts.unlinked} unlinked GBP assets`}
-              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] sm:min-h-0 ${
+              className={`px-3 py-1.5 rounded-lg tactile-action cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[36px] sm:min-h-0 text-xs font-medium ${
                 opportunityFilter === "DISCONNECTED_GBP_WEBSITE"
-                  ? "bg-purple-600 text-white font-bold shadow-sm"
-                  : "bg-white/[0.04] hover:bg-white/[0.08] text-purple-300 border border-purple-500/30"
+                  ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                  : "bg-white/[0.04] hover:bg-white/[0.08] text-purple-300 hover:text-white border border-white/[0.08]"
               }`}
             >
-              <Unlink className="w-3 h-3" />
+              <Unlink className="w-3.5 h-3.5" />
               <span>Unlinked GBP</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-purple-500/20 text-[10px]">{counts.unlinked}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-purple-500/20 font-mono text-[10px]">{counts.unlinked}</span>
             </button>
 
             <button
               type="button"
               onClick={() => setOpportunityFilter("WEBSITE")}
               aria-label={`Show ${counts.noWebsite} businesses without website`}
-              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] sm:min-h-0 ${
+              className={`px-3 py-1.5 rounded-lg tactile-action cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[36px] sm:min-h-0 text-xs font-medium ${
                 opportunityFilter === "WEBSITE"
-                  ? "bg-amber-600 text-white font-bold shadow-sm"
-                  : "bg-white/[0.04] hover:bg-white/[0.08] text-amber-300 border border-amber-500/30"
+                  ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                  : "bg-white/[0.04] hover:bg-white/[0.08] text-amber-300 hover:text-white border border-white/[0.08]"
               }`}
             >
-              <XCircle className="w-3 h-3" />
+              <XCircle className="w-3.5 h-3.5" />
               <span>No Website</span>
-              <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-[10px]">{counts.noWebsite}</span>
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 font-mono text-[10px]">{counts.noWebsite}</span>
             </button>
 
             {counts.mobileGap > 0 && (
@@ -155,29 +155,29 @@ export function LeadMatrixTable({
                 type="button"
                 onClick={() => setOpportunityFilter("MOBILE_GAP")}
                 aria-label={`Show ${counts.mobileGap} businesses with mobile layout gaps`}
-                className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[34px] sm:min-h-0 ${
+                className={`px-3 py-1.5 rounded-lg tactile-action cursor-pointer flex items-center gap-1.5 shrink-0 min-h-[36px] sm:min-h-0 text-xs font-medium ${
                   opportunityFilter === "MOBILE_GAP"
-                    ? "bg-blue-600 text-white font-bold shadow-sm"
-                    : "bg-white/[0.04] hover:bg-white/[0.08] text-blue-300 border border-blue-500/30"
+                    ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                    : "bg-white/[0.04] hover:bg-white/[0.08] text-blue-300 hover:text-white border border-white/[0.08]"
                 }`}
               >
-                <Smartphone className="w-3 h-3" />
+                <Smartphone className="w-3.5 h-3.5" />
                 <span>Mobile Gap</span>
-                <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-[10px]">{counts.mobileGap}</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-blue-500/20 font-mono text-[10px]">{counts.mobileGap}</span>
               </button>
             )}
           </div>
         </div>
 
         {/* Right: Sort & View Toggle Switcher */}
-        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-white/[0.06]">
+        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-white/[0.06]">
           {/* Website Filter Select */}
           <select
             data-testid="filter-website"
             value={websiteFilter}
             onChange={(e) => setWebsiteFilter(e.target.value)}
             aria-label="Filter by website connection status"
-            className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono min-h-[36px] sm:min-h-0"
+            className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-slate-900 border border-white/[0.1] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-sans min-h-[38px] sm:min-h-0"
           >
             <option value="ALL">All Web States</option>
             <option value="NO_WEBSITE">No Website</option>
@@ -191,7 +191,7 @@ export function LeadMatrixTable({
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
             aria-label="Sort leads"
-            className="flex-1 sm:flex-initial px-2.5 py-1.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-mono font-medium min-h-[36px] sm:min-h-0"
+            className="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-slate-900 border border-white/[0.1] text-slate-200 text-xs focus:outline-none focus:border-indigo-400 cursor-pointer font-sans font-medium min-h-[38px] sm:min-h-0"
           >
             <option value="score">Sort: Lead Score</option>
             <option value="reviews">Sort: Review Count</option>
@@ -199,12 +199,12 @@ export function LeadMatrixTable({
           </select>
 
           {/* View Switcher (Table Matrix vs Grid Cards - Visible on medium+ screens) */}
-          <div className="hidden md:flex items-center p-0.5 rounded-lg bg-slate-900/60 backdrop-blur-md border border-white/[0.12]">
+          <div className="hidden md:flex items-center p-0.5 rounded-lg bg-slate-900 border border-white/[0.1]">
             <button
               type="button"
               onClick={() => setViewMode("table")}
-              className={`p-1.5 rounded-md transition cursor-pointer ${
-                viewMode === "table" ? "bg-white/[0.1] text-white" : "text-slate-500 hover:text-slate-300"
+              className={`p-1.5 rounded-md transition tactile-action cursor-pointer ${
+                viewMode === "table" ? "bg-white/[0.12] text-white" : "text-slate-400 hover:text-slate-200"
               }`}
               title="Table View"
             >
@@ -213,8 +213,8 @@ export function LeadMatrixTable({
             <button
               type="button"
               onClick={() => setViewMode("grid")}
-              className={`p-1.5 rounded-md transition cursor-pointer ${
-                viewMode === "grid" ? "bg-white/[0.1] text-white" : "text-slate-500 hover:text-slate-300"
+              className={`p-1.5 rounded-md transition tactile-action cursor-pointer ${
+                viewMode === "grid" ? "bg-white/[0.12] text-white" : "text-slate-400 hover:text-slate-200"
               }`}
               title="Opportunity Grid Cards"
             >

@@ -1,4 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
+import dotenv from "dotenv";
+
+dotenv.config({ path: ".env.local" });
+dotenv.config();
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -23,7 +27,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npx next dev -p 3098",
+    command: process.env.CI ? "npx next start -p 3098" : "npx next dev -p 3098",
     url: "http://localhost:3098",
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",
@@ -33,7 +37,7 @@ export default defineConfig({
       PORT: "3098",
       ALLOW_INSECURE_LOCAL_AUTH: "true",
       DATABASE_URL: process.env.DATABASE_URL || "./lead_engine.db",
-      LEAD_ENGINE_API_SECRET: process.env.LEAD_ENGINE_API_SECRET || "",
+      LEAD_ENGINE_API_SECRET: process.env.LEAD_ENGINE_API_SECRET || "ci-secret-passphrase-testing",
       PLAYWRIGHT_NO_SANDBOX: "true",
     },
   },

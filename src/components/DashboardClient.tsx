@@ -315,7 +315,16 @@ export function DashboardClient() {
               required
               className="w-full px-3.5 py-2 rounded-lg bg-slate-900/80 border border-white/[0.15] text-slate-100 text-xs font-mono focus:outline-none focus:border-indigo-400"
             />
-            {authErrorMsg && <p className="text-rose-400 text-xs font-mono">{authErrorMsg}</p>}
+            {authErrorMsg && (
+              <div className="space-y-1.5">
+                <p className="text-rose-400 text-xs font-mono">{authErrorMsg}</p>
+                {authErrorMsg.includes("LEAD_ENGINE_API_SECRET") && (
+                  <p className="text-[11px] text-slate-400 leading-relaxed bg-slate-900/90 p-2.5 rounded border border-white/[0.08]">
+                    Set <code className="text-indigo-300 font-mono">LEAD_ENGINE_API_SECRET=your_secret</code> in your <code className="text-indigo-300 font-mono">.env.local</code> file and restart the Next.js dev server.
+                  </p>
+                )}
+              </div>
+            )}
             <button
               type="submit"
               disabled={isLoggingIn}

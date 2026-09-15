@@ -332,7 +332,7 @@ export function ScanLauncher({
               setActiveMode("discovery");
               setErrorMessage(null);
             }}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium tactile-action cursor-pointer flex items-center gap-1.5 ${
               activeMode === "discovery"
                 ? "bg-indigo-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
@@ -349,9 +349,9 @@ export function ScanLauncher({
               setActiveMode("direct");
               setErrorMessage(null);
             }}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium tactile-action cursor-pointer flex items-center gap-1.5 ${
               activeMode === "direct"
-                ? "bg-emerald-600 text-white shadow-sm"
+                ? "bg-indigo-600 text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >

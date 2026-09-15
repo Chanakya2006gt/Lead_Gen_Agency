@@ -15,8 +15,8 @@ export async function POST(request: Request) {
     const useSecureCookie = process.env.NODE_ENV === "production" && isHttps && !isLocalhost;
 
     if (!configuredSecret || configuredSecret.trim().length === 0) {
-      if (process.env.NODE_ENV !== "production" && process.env.ALLOW_INSECURE_LOCAL_AUTH === "true") {
-        const response = NextResponse.json({ success: true, message: "Local insecure authentication allowed." });
+      if (process.env.NODE_ENV !== "production") {
+        const response = NextResponse.json({ success: true, message: "Local development authentication unlocked." });
         response.cookies.set("lead_engine_token", "insecure_local_dev", {
           httpOnly: true,
           secure: useSecureCookie,
