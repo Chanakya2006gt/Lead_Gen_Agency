@@ -8,7 +8,7 @@ async function unlockWorkstationIfNeeded(page: any) {
     {
       name: "lead_engine_token",
       value: secret,
-      url: "http://localhost:3098",
+      url: "http://127.0.0.1:3098",
     },
   ]);
 
@@ -29,6 +29,60 @@ async function unlockWorkstationIfNeeded(page: any) {
   }
   await expect(brandHeader).toBeVisible({ timeout: 15000 });
   await page.waitForTimeout(300);
+}
+
+async function mockDirectAuditRoute(page: any) {
+  await page.route("**/api/audit/direct", async (route: any) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        lead: {
+          id: "mock-direct-lead-1",
+          scanId: "direct-scan",
+          name: "Trelio Digital",
+          website: "https://trelio.in",
+          category: "Technology & Software Services",
+          categoryConfidence: 0.95,
+          address: "Local Market",
+          totalLeadScore: 85,
+          opportunityAngle: "Missing Viewport Optimization",
+          humanStatus: "NEW",
+          phone: "+91 9876543210",
+          email: "contact@trelio.in",
+          rating: 4.8,
+          reviewCount: 42,
+          auditTelemetry: {
+            hasSsl: true,
+            loadLatencyMs: 320,
+            findings: [
+              {
+                category: "ux",
+                finding: "Missing Viewport Meta Tag",
+                evidence: "Mobile viewport is not optimized for handheld displays.",
+                confidence: 0.9,
+              },
+            ],
+          },
+          synthesis: {
+            whyThisLead: "High-value technology agency target with mobile layout optimization opportunities.",
+            commercialObservations: [
+              "No responsive viewport meta tag detected on mobile emulation.",
+              "Fast server response latency under 350ms.",
+            ],
+            recommendedAngle: "Mobile responsive overhaul",
+            copyVariants: {
+              whatsapp: "Hi team, noticed an opportunity to improve mobile conversions on your site.",
+              email: "Subject: Mobile experience teardown for Trelio\n\nHi team, noticed an opportunity...",
+              phone: "Hello, this is Chanakya with an observation on your website experience...",
+              scope: "Phase 1: Viewport and layout stabilization.",
+            },
+          },
+        },
+        isEphemeral: true,
+      }),
+    });
+  });
 }
 
 async function switchToDirectTeardownTab(page: any) {
@@ -74,6 +128,7 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
   }) => {
     test.setTimeout(90000);
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await mockDirectAuditRoute(page);
 
     await page.goto("/");
     await unlockWorkstationIfNeeded(page);
@@ -132,6 +187,7 @@ test.describe("Executive Command Center E2E Smoke & Audit Suite", () => {
 
   test("Drawer Accessibility: Dialog semantics, aria-modal, and Escape-to-close", async ({ page }) => {
     test.setTimeout(90000);
+    await mockDirectAuditRoute(page);
     await page.goto("/");
     await unlockWorkstationIfNeeded(page);
 

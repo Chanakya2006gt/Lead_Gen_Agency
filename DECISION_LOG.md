@@ -470,11 +470,19 @@ Exact commands run and verified:
    - **Problem**: Background `GET /api/scans` calls on initial page mount caused a race condition where the workstation locked mid-test after `unlockWorkstationIfNeeded` checked visibility.
    - **Resolution**: Updated `unlockWorkstationIfNeeded` to pre-seed the `lead_engine_token` session cookie via `page.context().addCookies()`, eliminating authentication race conditions across all 12 E2E test specs.
 
+4. **Deterministic Teardown Mocking & 127.0.0.1 IPv4 Binding (`playwright.config.ts`, `command-center.spec.ts`)**:
+   - **Problem**: In GitHub Actions CI, auditing external production URL `https://trelio.in` could trigger third-party Cloudflare WAF challenges or DNS latency on datacenter runner IPs. In addition, `localhost` could resolve to IPv6 `::1` on Ubuntu while Next.js bound to IPv4.
+   - **Resolution**:
+     - Bound `webServer` and Playwright `baseURL` to explicit `http://127.0.0.1:3098` with `-H 127.0.0.1`.
+     - Instrumented `mockDirectAuditRoute` in `command-center.spec.ts` to mock the `/api/audit/direct` API response with a realistic synthesis dossier for UI smoke testing.
+     - Reduced test suite runtime from 73s to **6.8s** (10.7x speedup).
+
 ### Empirical Verification & Audit Log
 
 Exact commands run and verified:
 - `npm run lint` (`tsc --noEmit`): Clean pass (0 errors).
-- `npm run build` (`next build`): Clean pass (2.3s).
-- `npm run test:e2e` (`playwright test`): **12 passed** (100% across Desktop Chromium and Mobile Chrome [Pixel 7] in 1.1m).
+- `npm run build` (`next build`): Clean pass (3.2s).
+- `CI=1 npm run test:e2e` (`playwright test`): **12 passed in 6.8s** (100% across Desktop Chromium and Mobile Chrome [Pixel 7]).
+
 
 

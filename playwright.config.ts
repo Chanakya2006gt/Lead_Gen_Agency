@@ -10,7 +10,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || "http://localhost:3098",
+    baseURL: process.env.PLAYWRIGHT_TEST_BASE_URL || "http://127.0.0.1:3098",
     trace: "on-first-retry",
     launchOptions: {
       args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
@@ -27,8 +27,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: process.env.CI ? "npx next start -p 3098" : "npx next dev -p 3098",
-    url: "http://localhost:3098",
+    command: process.env.CI ? "npx next start -H 127.0.0.1 -p 3098" : "npx next dev -H 127.0.0.1 -p 3098",
+    url: "http://127.0.0.1:3098",
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",
     stderr: "pipe",
