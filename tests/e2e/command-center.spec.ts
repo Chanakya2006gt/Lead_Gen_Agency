@@ -12,6 +12,11 @@ async function unlockWorkstationIfNeeded(page: any) {
     },
   ]);
 
+  const brandHeader = page.locator("h1:has-text('LEAD ENGINE')");
+  if (await brandHeader.isVisible().catch(() => false)) {
+    return;
+  }
+
   // 2. If the lock screen UI is visible, unlock it via form submission
   const lockInput = page.locator("input[placeholder='Workstation Secret']");
   if (await lockInput.isVisible({ timeout: 2000 }).catch(() => false)) {
@@ -20,15 +25,8 @@ async function unlockWorkstationIfNeeded(page: any) {
   }
 
   // 3. Confirm dashboard brand header is visible
-  const brandHeader = page.locator("h1:has-text('LEAD ENGINE')");
-  if (!await brandHeader.isVisible().catch(() => false)) {
-    if (await lockInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await lockInput.fill(secret);
-      await page.locator("button:has-text('Unlock Workstation')").click();
-    }
-  }
   await expect(brandHeader).toBeVisible({ timeout: 15000 });
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(200);
 }
 
 async function mockDirectAuditRoute(page: any) {
