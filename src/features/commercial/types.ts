@@ -83,6 +83,16 @@ export interface ProblemValueAssessment {
   evidence: { statement: string; provenance: EvidenceProvenance }[];
 }
 
+export interface WbsDeliverable {
+  id: string;
+  title: string;
+  description: string;
+  baseHours: number;
+  scaledHours: number;
+  value: number;
+  severity: ProblemSeverity;
+}
+
 export interface CommercialProfile {
   businessScale: BusinessScale;
   businessScaleConfidence: number;
@@ -104,6 +114,8 @@ export interface CommercialProfile {
   recommendedBuildOffer: PriceRange;
   recommendedMonthlyCare: PriceRange;
   downscopedScopeDescription?: string;
+  wbsDeliverables?: WbsDeliverable[];
+  totalEngineeringHours?: number;
 
   // Dual Intelligence Scoring
   commercialFitScore: number; // 0–100: Can we construct a viable offer for this client?

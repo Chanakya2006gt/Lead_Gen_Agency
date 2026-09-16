@@ -39,13 +39,16 @@ export class CommercialEconomicsEngine {
       websiteTextSnippet: params.websiteTextSnippet,
     });
 
-    // 3. Problem Value & Revenue Proximity Evaluation
+    // 3. Problem Value & Revenue Proximity Evaluation (Scale-Aware)
     const problemValue = ProblemValueEvaluator.evaluate({
       hasWebsite: params.hasWebsite,
       isGbpDisconnected: params.isGbpDisconnected,
+      category: params.category,
+      businessScale: scaleResult.scale,
       auditTelemetry: params.auditTelemetry,
       marketContext,
       businessName: params.name,
+      websiteTextSnippet: params.websiteTextSnippet,
     });
 
     // 4. Evidence-Driven Ability to Pay
@@ -75,7 +78,7 @@ export class CommercialEconomicsEngine {
       marketContext,
     });
 
-    // 7. Agency Delivery Economics, Scope Transformation & Feasible Offer Window
+    // 7. Dynamic Finding-Driven Work Breakdown Structure & Feasible Offer Window
     const offerResult = OfferEngine.calculateOffer({
       businessScale: scaleResult.scale,
       abilityToPay: abilityResult.abilityToPay,
@@ -84,6 +87,9 @@ export class CommercialEconomicsEngine {
       clientCommercialCeiling,
       marketContext,
       serviceType,
+      hasWebsite: params.hasWebsite,
+      isGbpDisconnected: params.isGbpDisconnected,
+      auditTelemetry: params.auditTelemetry,
     });
 
     // 8. Pursuit Decisioning & Dual-Scoring
@@ -108,6 +114,8 @@ export class CommercialEconomicsEngine {
       recommendedBuildOffer: offerResult.recommendedBuildOffer,
       recommendedMonthlyCare: offerResult.recommendedMonthlyCare,
       downscopedScopeDescription: offerResult.downscopedScopeDescription,
+      wbsDeliverables: offerResult.wbsDeliverables,
+      totalEngineeringHours: offerResult.totalEngineeringHours,
       commercialFitScore: pursuitResult.commercialFitScore,
       leadAttractivenessScore: pursuitResult.leadAttractivenessScore,
       pursuitAssessment: pursuitResult.pursuitAssessment,

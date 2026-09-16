@@ -1,4 +1,4 @@
-import { ProblemValueAssessment, ProblemSeverity, EvidenceProvenance } from "./types";
+import { ProblemValueAssessment, ProblemSeverity, EvidenceProvenance, BusinessScale } from "./types";
 import { AuditTelemetry } from "@/core/db/schema";
 import { MarketContextResult } from "./MarketContext";
 import { BusinessModelClassifier } from "./BusinessModelClassifier";
@@ -7,6 +7,7 @@ export interface ProblemValueParams {
   hasWebsite: boolean;
   isGbpDisconnected?: boolean;
   category?: string | null;
+  businessScale?: BusinessScale;
   auditTelemetry?: AuditTelemetry | null;
   marketContext: MarketContextResult;
   businessName: string;
@@ -17,6 +18,31 @@ export class ProblemValueEvaluator {
   public static evaluate(params: ProblemValueParams): ProblemValueAssessment {
     const evidence: { statement: string; provenance: EvidenceProvenance }[] = [];
     const currency = params.marketContext.currency;
+
+    const scale = params.businessScale || "UNKNOWN";
+    let scaleMultiplier = 1.0;
+    switch (scale) {
+      case "ENTERPRISE":
+        scaleMultiplier = 5.0;
+        break;
+      case "LARGE":
+        scaleMultiplier = 3.0;
+        break;
+      case "MEDIUM":
+        scaleMultiplier = 2.0;
+        break;
+      case "SMALL_MEDIUM":
+        scaleMultiplier = 1.4;
+        break;
+      case "SMALL":
+        scaleMultiplier = 1.1;
+        break;
+      case "MICRO":
+      case "UNKNOWN":
+      default:
+        scaleMultiplier = 1.0;
+        break;
+    }
 
     // 1. Establish Business Model Context
     const classification = BusinessModelClassifier.classify({
@@ -47,8 +73,8 @@ export class ProblemValueEvaluator {
           operationalImpact: "MEDIUM",
           frequency: "DAILY",
           problemValueBand: {
-            min: currency === "INR" ? 15000 : 1500,
-            max: currency === "INR" ? 35000 : 3500,
+            min: Math.round(((currency === "INR" ? 15000 : 1500) * scaleMultiplier) / 1000) * 1000,
+            max: Math.round(((currency === "INR" ? 35000 : 3500) * scaleMultiplier) / 1000) * 1000,
             currency,
             confidence: 0.85,
             basis: "BOTTOM_UP_WBS",
@@ -77,8 +103,8 @@ export class ProblemValueEvaluator {
         operationalImpact: "HIGH",
         frequency: "DAILY",
         problemValueBand: {
-          min: currency === "INR" ? 25000 : 2500,
-          max: currency === "INR" ? 60000 : 6000,
+          min: Math.round(((currency === "INR" ? 25000 : 2500) * scaleMultiplier) / 1000) * 1000,
+          max: Math.round(((currency === "INR" ? 60000 : 6000) * scaleMultiplier) / 1000) * 1000,
           currency,
           confidence: 0.85,
           basis: "BOTTOM_UP_WBS",
@@ -171,24 +197,24 @@ export class ProblemValueEvaluator {
     }
 
     let severity: ProblemSeverity = "LOW";
-    let minVal = currency === "INR" ? 5000 : 500;
-    let maxVal = currency === "INR" ? 15000 : 1500;
+    let minVal = Math.round(((currency === "INR" ? 5000 : 500) * scaleMultiplier) / 1000) * 1000;
+    let maxVal = Math.round(((currency === "INR" ? 15000 : 1500) * scaleMultiplier) / 1000) * 1000;
 
     if (severityScore >= 6) {
       severity = "CRITICAL";
       revenueProximity = "HIGH";
       operationalImpact = "HIGH";
-      minVal = currency === "INR" ? 30000 : 3000;
-      maxVal = currency === "INR" ? 65000 : 6500;
+      minVal = Math.round(((currency === "INR" ? 30000 : 3000) * scaleMultiplier) / 1000) * 1000;
+      maxVal = Math.round(((currency === "INR" ? 65000 : 6500) * scaleMultiplier) / 1000) * 1000;
     } else if (severityScore >= 4) {
       severity = "HIGH";
       revenueProximity = revenueProximity === "HIGH" ? "HIGH" : "MEDIUM";
-      minVal = currency === "INR" ? 20000 : 2000;
-      maxVal = currency === "INR" ? 45000 : 4500;
+      minVal = Math.round(((currency === "INR" ? 20000 : 2000) * scaleMultiplier) / 1000) * 1000;
+      maxVal = Math.round(((currency === "INR" ? 45000 : 4500) * scaleMultiplier) / 1000) * 1000;
     } else if (severityScore >= 2) {
       severity = "MEDIUM";
-      minVal = currency === "INR" ? 10000 : 1000;
-      maxVal = currency === "INR" ? 25000 : 2500;
+      minVal = Math.round(((currency === "INR" ? 10000 : 1000) * scaleMultiplier) / 1000) * 1000;
+      maxVal = Math.round(((currency === "INR" ? 25000 : 2500) * scaleMultiplier) / 1000) * 1000;
     } else {
       severity = "LOW";
       evidence.push({

@@ -464,6 +464,30 @@ Deliverables:
                 </div>
               </div>
 
+              {/* Itemized Deliverables Breakdown (Dynamic Finding-Driven WBS) */}
+              {commercial.wbsDeliverables && commercial.wbsDeliverables.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="text-[11px] font-mono text-indigo-300 font-semibold flex items-center justify-between">
+                    <span>Itemized Scope Deliverables ({commercial.totalEngineeringHours ?? commercial.wbsDeliverables.reduce((s: number, d: any) => s + (d.scaledHours || 0), 0)} hrs)</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Dynamic Finding WBS</span>
+                  </div>
+                  <div className="space-y-1">
+                    {commercial.wbsDeliverables.map((deliv: any, dIdx: number) => (
+                      <div key={dIdx} className="flex items-start justify-between text-[11px] p-2 rounded bg-black/30 border border-white/[0.04]">
+                        <div className="space-y-0.5 max-w-[75%]">
+                          <div className="font-semibold text-slate-200">{deliv.title}</div>
+                          <div className="text-[10px] text-slate-400 font-sans leading-relaxed">{deliv.description}</div>
+                        </div>
+                        <div className="text-right font-mono shrink-0 pl-2">
+                          <div className="text-emerald-400 font-bold">{curSym}{deliv.value.toLocaleString(isINR ? "en-IN" : "en-US")}</div>
+                          <div className="text-[10px] text-slate-500">{deliv.scaledHours}h</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Rationale & Evidence Footnote */}
               <div className="text-[11px] text-slate-300 leading-relaxed bg-black/20 p-2.5 rounded-lg border border-white/[0.04]">
                 <span className="text-slate-200 font-semibold">Strategic Rationale: </span>

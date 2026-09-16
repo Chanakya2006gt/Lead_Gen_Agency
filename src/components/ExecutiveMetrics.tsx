@@ -10,8 +10,41 @@ interface ExecutiveMetricsProps {
 
 export function ExecutiveMetrics({ leads }: ExecutiveMetricsProps) {
   const totalQualified = leads.length;
-  const unlinkedGbpCount = leads.filter((l) => l.isGbpDisconnected).length;
-  const noWebsiteCount = leads.filter((l) => !l.hasWebsite && !l.isGbpDisconnected).length;
+  const unlinkedGbpLeads = leads.filter((l) => l.isGbpDisconnected);
+  const unlinkedGbpCount = unlinkedGbpLeads.length;
+
+  const noWebsiteLeads = leads.filter((l) => !l.hasWebsite && !l.isGbpDisconnected);
+  const noWebsiteCount = noWebsiteLeads.length;
+
+  const formatScopeRange = (matchingLeads: Lead[]): string => {
+    if (matchingLeads.length === 0) return "No active gaps";
+    const minOffers = matchingLeads
+      .map((l) => (l.dossier as any)?.commercialProfile?.recommendedBuildOffer?.min)
+      .filter((v): v is number => typeof v === "number");
+    const maxOffers = matchingLeads
+      .map((l) => (l.dossier as any)?.commercialProfile?.recommendedBuildOffer?.max)
+      .filter((v): v is number => typeof v === "number");
+
+    if (minOffers.length === 0 || maxOffers.length === 0) {
+      return `${matchingLeads.length} Opp${matchingLeads.length > 1 ? "s" : ""}`;
+    }
+
+    const min = Math.min(...minOffers);
+    const max = Math.max(...maxOffers);
+
+    const fmt = (v: number) => {
+      if (v >= 100000) {
+        const lakhs = (v / 100000).toFixed(v % 100000 === 0 ? 0 : 1);
+        return `₹${lakhs}L`;
+      }
+      return `₹${Math.round(v / 1000)}k`;
+    };
+
+    return min === max ? `${fmt(min)} Scope` : `${fmt(min)}–${fmt(max)} Scope`;
+  };
+
+  const unlinkedGbpSubtitle = formatScopeRange(unlinkedGbpLeads);
+  const noWebsiteSubtitle = formatScopeRange(noWebsiteLeads);
 
   const verifiedLeads = leads.filter((l) => typeof l.rating === "number" && l.rating !== null);
   const avgRating = verifiedLeads.length > 0
@@ -52,8 +85,8 @@ export function ExecutiveMetrics({ leads }: ExecutiveMetricsProps) {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
           <span className="text-xl sm:text-2xl font-bold text-white font-mono">{unlinkedGbpCount}</span>
-          <span className="text-[11px] text-slate-300 font-mono truncate">
-            ₹8k–₹15k Scope
+          <span className={`text-[11px] font-mono truncate ${unlinkedGbpCount === 0 ? "text-slate-500" : "text-slate-300"}`}>
+            {unlinkedGbpSubtitle}
           </span>
         </div>
       </div>
@@ -68,8 +101,8 @@ export function ExecutiveMetrics({ leads }: ExecutiveMetricsProps) {
         </div>
         <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2">
           <span className="text-xl sm:text-2xl font-bold text-white font-mono">{noWebsiteCount}</span>
-          <span className="text-[11px] text-slate-300 font-mono truncate">
-            ₹18k–₹35k Scope
+          <span className={`text-[11px] font-mono truncate ${noWebsiteCount === 0 ? "text-slate-500" : "text-slate-300"}`}>
+            {noWebsiteSubtitle}
           </span>
         </div>
       </div>

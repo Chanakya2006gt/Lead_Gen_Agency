@@ -447,6 +447,36 @@ Exact commands run and verified:
 
 ---
 
+## [AD-046] Dynamic Finding-Driven WBS Scoping, Scale Complexity Multipliers & True Pipeline Valuation
+
+- **Date**: 2026-09-16
+- **Status**: Implemented & Verified
+- **Driver**: Eliminating hardcoded pricing brackets (such as `₹8k–₹15k Scope`, `₹18k–₹35k Scope`, or arbitrary 1–2L price ceilings) in favor of bottom-up deliverable itemization where engineering hours, technical scope, and deal valuation are dynamically derived from actual audit findings, technical defects, and organizational footprint multipliers.
+
+### Context & Root Cause Analysis
+
+1. **Static Pricing Rigidity & Clamp Bottlenecks**:
+   - **Problem**: Previous iterations contained hardcoded price ranges in `ExecutiveMetrics.tsx` (`₹8k–₹15k Scope` for Unlinked GBP and `₹18k–₹35k Scope` for Zero Website), while `OfferEngine.ts` pegged theoretical solution hours to static 8h or 18h tasks with an artificial 30% clamp (`offerMin * 1.3`). In addition, `ProblemValueEvaluator.ts` used flat bands (₹25k–₹60k) across all business sizes.
+   - **Impact**: When an established multi-branch clinic or large corporate entity (with capacity for ₹1.5L–₹3.5L+) was audited with major digital breakdowns, the dashboard still portrayed the agency as quoting entry-level ₹18k–₹35k freelancer fees, and `OfferEngine` failed to capture the client's commercial reality. Conversely, when `unlinkedGbpCount` was `0`, displaying `₹8k–₹15k Scope` beneath a `0` created the visual illusion of an unpopulated mock placeholder.
+   - **Resolution**:
+     - Created `FindingWbsEngine.ts` to itemize technical deliverables bottom-up directly from observed audit findings (`!hasWebsite`, `isGbpDisconnected`, `!hasSsl`, `!viewportMetaPresent`, `!hasInteractiveBookingForm`, `!hasDirectClickToCall`, `initialLoadLatencyMs > 2500`, `brokenLinksCount > 0`).
+     - Established an Architectural Complexity Multiplier ($M_{scale}$) based on organizational scale (`MICRO`: 1.0x, `SMALL`: 1.25x, `SMALL_MEDIUM`: 1.6x, `MEDIUM`: 2.2x, `LARGE`: 3.5x, `ENTERPRISE`: 6.0x) representing multi-department, multi-provider routing and enterprise compliance requirements.
+     - Refined `BusinessScaleInferrer.ts` to exempt businesses with positive premium indicators (`aesthetic`, `clinic`, `hospital`, `luxury`, `pvt ltd`) from false `isMicroRetail` negative penalties.
+     - Updated `ExecutiveMetrics.tsx` to dynamically aggregate actual recommended offers from matching leads, rendering state-aware `No active gaps` when count is `0`, and localized dynamic ranges (`₹25k–₹1.5L Scope`) when gaps exist.
+     - Enhanced `LeadInspectorDrawer.tsx` to render an itemized WBS deliverables breakdown in the *Commercial Economics* tab.
+
+### Empirical Verification & Audit Log
+
+Exact commands run and verified:
+- `npx vitest run tests/unit/FindingWbsEngine.test.ts`: **5 passed in 2ms** (100% pass rate).
+- `npx vitest run tests/unit/CommercialEconomicsEngine.test.ts`: **6 passed in 17ms** (100% pass rate).
+- `npx vitest run tests/unit`: **107 passed across 21 test suites in 3.42s** (100% pass rate).
+- `npm run build` (`next build`): Clean production build pass (0 TypeScript errors, 0 unhandled type warnings, 14 routes compiled).
+- `CI=1 npx playwright test`: **12 passed in 15.9s** (100% pass rate across Desktop Chromium and Mobile Chrome [Pixel 7]).
+
+
+---
+
 ## [AD-045] Workstation Authentication Hardening, CI Pipeline Optimization & E2E Test Determinism
 
 - **Date**: 2026-09-15

@@ -56,11 +56,15 @@ export class BusinessScaleInferrer {
     }
 
     // 2. Category Prior Signal (Directional Prior, not absolute answer)
-    const isMicroRetail = ["cafe", "café", "bakery", "salon", "barber", "plumber", "electrician", "tailor", "coffee shop", "tea stall", "food truck"].some(
+    const hasPremiumIndicator = ["clinic", "aesthetic", "dermatology", "hospital", "cosmetic", "luxury", "resort", "pvt ltd", "speciality", "specialist", "implant"].some(
+      (kw) => categoryLower.includes(kw) || nameLower.includes(kw)
+    );
+
+    const isMicroRetail = !hasPremiumIndicator && ["cafe", "café", "bakery", "salon", "barber", "plumber", "electrician", "tailor", "coffee shop", "tea stall", "food truck"].some(
       (cat) => categoryLower.includes(cat) || nameLower.includes(cat)
     );
 
-    const isMidHealthcareOrContractor = ["dental", "clinic", "dentist", "physiotherapy", "dermatology", "architect", "contractor", "lawyer", "advocate", "chartered accountant", "auto repair"].some(
+    const isMidHealthcareOrContractor = ["dental", "clinic", "dentist", "physiotherapy", "dermatology", "architect", "contractor", "lawyer", "advocate", "chartered accountant", "auto repair", "aesthetic"].some(
       (cat) => categoryLower.includes(cat) || nameLower.includes(cat)
     );
 
@@ -68,7 +72,14 @@ export class BusinessScaleInferrer {
       (cat) => categoryLower.includes(cat) || nameLower.includes(cat)
     );
 
-    if (isMicroRetail) {
+    if (hasPremiumIndicator && (categoryLower.includes("salon") || nameLower.includes("salon") || categoryLower.includes("studio") || nameLower.includes("studio"))) {
+      score += 2;
+      evidence.push({
+        signal: "Premium aesthetic clinic or luxury cosmetic studio profile detected (exempt from micro retail prior).",
+        weight: 2,
+        provenance: "INFERRED",
+      });
+    } else if (isMicroRetail) {
       score -= 3;
       evidence.push({
         signal: "Category prior (Local Micro Retail / Service Provider) indicates lean local operation.",

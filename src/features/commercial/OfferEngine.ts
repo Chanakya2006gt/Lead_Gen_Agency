@@ -5,8 +5,11 @@ import {
   MarketBenchmark,
   BusinessScale,
   AbilityToPay,
+  WbsDeliverable,
 } from "./types";
 import { MarketContextResult } from "./MarketContext";
+import { FindingWbsEngine } from "./FindingWbsEngine";
+import { AuditTelemetry } from "@/core/db/schema";
 
 export interface OfferEngineParams {
   businessScale: BusinessScale;
@@ -16,6 +19,10 @@ export interface OfferEngineParams {
   clientCommercialCeiling: PriceRange;
   marketContext: MarketContextResult;
   serviceType: string;
+  hasWebsite?: boolean;
+  isGbpDisconnected?: boolean;
+  auditTelemetry?: AuditTelemetry | null;
+  relevantWorkflows?: any;
 }
 
 export interface FeasibleOfferResult {
@@ -29,6 +36,8 @@ export interface FeasibleOfferResult {
   recommendedBuildOffer: PriceRange;
   recommendedMonthlyCare: PriceRange;
   downscopedScopeDescription?: string;
+  wbsDeliverables?: WbsDeliverable[];
+  totalEngineeringHours?: number;
   commercialRationale: string;
 }
 
@@ -41,20 +50,20 @@ export class OfferEngine {
     const isINR = currency === "INR";
     const hourlyRate = isINR ? this.HOURLY_BASELINE_INR : this.HOURLY_BASELINE_USD;
 
-    // 1. Initial Theoretical Solution Estimation (Full WBS)
-    let fullHours = 18;
-    let serviceDesc = "Complete Responsive Storefront & Conversion Funnel";
+    // 1. Dynamic Bottom-Up Finding-Driven Work Breakdown Structure (WBS)
+    const wbsResult = FindingWbsEngine.itemize({
+      hasWebsite: params.hasWebsite ?? !params.serviceType?.toLowerCase().includes("storefront"),
+      isGbpDisconnected: params.isGbpDisconnected ?? params.serviceType?.toLowerCase().includes("gbp"),
+      auditTelemetry: params.auditTelemetry,
+      businessScale: params.businessScale,
+      relevantWorkflows: params.relevantWorkflows,
+      currency,
+      hourlyRate,
+    });
 
-    const servLower = (params.serviceType || "").toLowerCase();
-    if (servLower.includes("custom") || servLower.includes("software") || servLower.includes("ops")) {
-      fullHours = 45;
-      serviceDesc = "Custom Operational Software, Multi-Doctor Intake & WhatsApp Reminders";
-    } else if (servLower.includes("gbp") || servLower.includes("sync") || servLower.includes("local seo")) {
-      fullHours = 8;
-      serviceDesc = "Google Business Profile Sync, Local Schema & Mobile Linkage";
-    }
-
-    const fullTheoreticalFloor = fullHours * hourlyRate;
+    const fullHours = wbsResult.totalScaledHours;
+    const fullTheoreticalFloor = wbsResult.wbsFloorPrice;
+    const serviceDesc = wbsResult.scopeSummary;
     const clientCeilingMax = params.clientCommercialCeiling.max;
     const clientCeilingMin = params.clientCommercialCeiling.min;
 
@@ -92,6 +101,8 @@ export class OfferEngine {
           confidence: 0.25,
           basis: "CATEGORY_PRIOR_FALLBACK",
         },
+        wbsDeliverables: wbsResult.deliverables,
+        totalEngineeringHours: 10,
         commercialRationale: "Insufficient empirical evidence observed to construct a reliable commercial proposal.",
       };
     }
@@ -100,7 +111,7 @@ export class OfferEngine {
     if (fullTheoreticalFloor <= clientCeilingMax) {
       // HEALTHY WINDOW: Full theoretical solution fits client's commercial reality
       const offerMin = Math.max(fullTheoreticalFloor, clientCeilingMin);
-      const offerMax = Math.min(offerMin * 1.3, clientCeilingMax);
+      const offerMax = Math.min(Math.max(wbsResult.wbsCeilingPrice, offerMin), clientCeilingMax);
 
       const careMin = isINR ? Math.round(offerMin * 0.08) : Math.round(offerMin * 0.1);
       const careMax = isINR ? Math.round(offerMax * 0.12) : Math.round(offerMax * 0.15);
@@ -130,27 +141,46 @@ export class OfferEngine {
           basis: "BOTTOM_UP_WBS",
         },
         recommendedMonthlyCare: {
-          min: Math.round(careMin / 500) * 500,
-          max: Math.round(careMax / 500) * 500,
+          min: Math.max(isINR ? 1000 : 100, Math.round(careMin / 500) * 500),
+          max: Math.max(isINR ? 2000 : 200, Math.round(careMax / 500) * 500),
           currency,
           confidence: 0.8,
           basis: "BOTTOM_UP_WBS",
         },
-        commercialRationale: `Client commercial capacity comfortably covers full scope (${serviceDesc}) within healthy margin boundaries.`,
+        wbsDeliverables: wbsResult.deliverables,
+        totalEngineeringHours: fullHours,
+        commercialRationale: `Client commercial capacity comfortably covers dynamic WBS scope (${serviceDesc}) within healthy margin boundaries.`,
       };
     }
 
     // Client commercial ceiling is lower than full theoretical scope: Attempt Scope Transformation
-    // Scope Transformation: Remove heavy custom modules, retain high-ROI core (e.g. Essential 1-Tap Mobile Conversion MVP)
-    const leanHours = Math.max(4, Math.min(8, Math.floor(clientCeilingMax / hourlyRate)));
-    const leanDeliveryFloor = leanHours * hourlyRate;
+    // Scope Transformation: Prioritize critical deliverables that fit within clientCeilingMax and 10-hour lean ceiling
+    const sortedDeliverables = [...wbsResult.deliverables].sort((a, b) => {
+      const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
+      return (order[a.severity] ?? 2) - (order[b.severity] ?? 2);
+    });
 
-    if (leanDeliveryFloor <= clientCeilingMax && leanHours >= 5) {
+    const maxDownscopeHours = Math.min(10, Math.floor(clientCeilingMax / hourlyRate));
+    const leanDeliverables: WbsDeliverable[] = [];
+    let accumulatedValue = 0;
+    let accumulatedHours = 0;
+    for (const d of sortedDeliverables) {
+      if (accumulatedValue + d.value <= clientCeilingMax && accumulatedHours + d.scaledHours <= maxDownscopeHours) {
+        leanDeliverables.push(d);
+        accumulatedValue += d.value;
+        accumulatedHours += d.scaledHours;
+      }
+    }
+
+    const leanHours = Math.max(4, Math.min(maxDownscopeHours, accumulatedHours || maxDownscopeHours));
+    const leanDeliveryFloor = Math.min(clientCeilingMax, Math.max(leanHours * hourlyRate, accumulatedValue || leanHours * hourlyRate));
+
+    if (leanDeliveryFloor <= clientCeilingMax && leanHours >= 4) {
       // DOWN-SCOPED SOLUTION: Viable lean package constructed via WBS transformation
-      const leanMin = clientCeilingMin;
+      const leanMin = Math.max(leanDeliveryFloor, clientCeilingMin);
       const leanMax = clientCeilingMax;
       const careMin = isINR ? 500 : 50;
-      const careMax = isINR ? 1500 : 150;
+      const careMax = isINR ? 2000 : 200;
 
       const currSym = isINR ? "₹" : currency === "GBP" ? "£" : currency === "AED" ? "د.إ " : "$";
       return {
@@ -184,8 +214,10 @@ export class OfferEngine {
           confidence: 0.75,
           basis: "COMMERCIAL_CEILING_CLAMPED",
         },
-        downscopedScopeDescription: "Lean High-Conversion MVP: 1-tap WhatsApp consultation triggers, mobile layout fixes, and Google Maps linkage (non-essential custom modules deferred).",
-        commercialRationale: `Full solution exceeds client ceiling (${currSym}${clientCeilingMax.toLocaleString()}). Transformed scope to high-ROI lean MVP (${leanHours} hrs) to preserve delivery margin and match buyer reality.`,
+        wbsDeliverables: leanDeliverables.length > 0 ? leanDeliverables : wbsResult.deliverables,
+        totalEngineeringHours: leanHours,
+        downscopedScopeDescription: "Lean High-Conversion MVP: Prioritized core conversion triggers, mobile layout containment, and entity linkage (heavy custom modules deferred).",
+        commercialRationale: `Full scope exceeds client ceiling (${currSym}${clientCeilingMax.toLocaleString()}). Transformed scope to high-ROI lean MVP (${leanHours} hrs) to preserve delivery margin and match buyer reality.`,
       };
     }
 
@@ -224,7 +256,10 @@ export class OfferEngine {
         confidence: 0.4,
         basis: "COMMERCIAL_CEILING_CLAMPED",
       },
+      wbsDeliverables: wbsResult.deliverables,
+      totalEngineeringHours: fullHours,
       commercialRationale: `Commercial ceiling (${currSym}${clientCeilingMax.toLocaleString()}) is below minimum profitable delivery cost (${currSym}${fullTheoreticalFloor.toLocaleString()}). Unfavorable unit economics.`,
     };
   }
 }
+
